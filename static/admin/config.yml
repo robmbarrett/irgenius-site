@@ -1,8 +1,11 @@
 backend:
-  name: git-gateway
+  name: github
+  repo: robmbarrett/irgenius-site
   branch: main
-media_folder: "static/images"  # Where uploaded images go
-public_folder: "/images"       # Public URL for images
+  client_id: Ov23liMNyd1NVo70OmHC
+  client_secret: ed6fe871f7f028c1ed598875137cc85256224e95
+media_folder: "static/images"
+public_folder: "/images"
 collections:
   - name: "pages"
     label: "Pages"
