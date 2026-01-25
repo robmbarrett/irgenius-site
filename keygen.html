@@ -3,42 +3,75 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Nostr Key Generator - Debug Mode</title>
+<title>Nostr Key Generator - irgenius.org</title>
+
+<!-- Leaflet for the map -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5n/N0RDwH4=" crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 700px; margin: 40px auto; padding: 20px; text-align: center; background: #f9f9f9; color: #333; }
-  h1 { color: #2c3e50; }
-  button { background: #27ae60; color: white; border: none; padding: 14px 28px; font-size: 18px; margin: 15px; cursor: pointer; border-radius: 8px; }
-  button:hover { background: #219653; }
-  button:disabled { background: #95a5a6; cursor: not-allowed; }
-  .result { display: none; margin-top: 30px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: left; }
+  body { font-family: system-ui, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; text-align: center; background: #f9f9f9; color: #333; }
+  h1, h2 { color: #2c3e50; margin-bottom: 20px; }
+  button { color: white; border: none; padding: 14px 28px; font-size: 18px; margin: 10px; cursor: pointer; border-radius: 8px; }
+  button.primary   { background: #27ae60; }
+  button.primary:hover   { background: #219653; }
+  button.primary:disabled { background: #95a5a6; cursor: not-allowed; }
+  button.secondary { background: #3498db; }
+  button.secondary:hover { background: #2980b9; }
+  button.danger    { background: #e74c3c; }
+  button.danger:hover    { background: #c0392b; }
+  .result, #confirmation, #mapScreen { display: none; margin-top: 30px; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: left; }
   .warning { color: #e74c3c; font-weight: bold; margin-bottom: 15px; font-size: 1.1em; }
   pre { background: #ecf0f1; padding: 15px; border-radius: 6px; overflow-x: auto; font-family: monospace; white-space: pre-wrap; word-break: break-all; margin: 10px 0; }
-  #status { color: #7f8c8d; font-size: 1.1em; margin: 20px 0; font-weight: bold; }
-  #debugInfo { background: #fff3cd; padding: 15px; border-radius: 8px; margin-top: 20px; text-align: left; }
+  .actions { text-align: center; margin-top: 20px; }
+  #status { color: #7f8c8d; font-size: 0.95em; margin-top: 10px; }
+  #usMapContainer { width: 100%; height: 450px; border: 1px solid #ccc; border-radius: 8px; overflow: hidden; }
 </style>
 </head>
 <body>
-///adding an update to force update
-<h1>Nostr Key Generator (Debug Version)</h1>
-<p>Paste the bundle correctly — then click the button below.</p>
 
-<button id="generateBtn" onclick="generateKey()">Generate New Key</button>
-<div id="status">Waiting for bundle to be loaded...</div>
+<h1>Nostr Key Generator</h1>
+<p>Generate a new Nostr key pair securely in your browser.<br><strong>Save your nsec</strong> — never share it!</p>
+
+<button id="generateBtn" class="primary" onclick="generateKey()">Generate New Key</button>
+<div id="status">Ready!</div>
 
 <div id="result" class="result">
-  <p class="warning">⚠️ SAVE YOUR nsec — NEVER SHARE IT!</p>
+  <p class="warning">⚠️ BACKUP REQUIRED — SAVE THIS NOW!</p>
   <p><strong>Secret Key (nsec):</strong></p>
   <pre id="nsec"></pre>
   <p><strong>Public Key (npub):</strong></p>
   <pre id="npub"></pre>
+
+  <div class="actions">
+    <button onclick="downloadBackup()" class="primary">Download Backup (.txt)</button>
+    <button onclick="copyNsec()" class="secondary">Copy nsec to Clipboard</button>
+  </div>
 </div>
 
-<div id="debugInfo">
-  <strong>Debug status:</strong><br>
-  <span id="debugLog">Open browser console (F12) for more details.</span>
+<div id="confirmation" class="result">
+  <h2>Backup Confirmation</h2>
+  <p class="warning">Did you successfully download and save the <code>nostr-key-backup.txt</code> file?</p>
+  <p><strong>Important:</strong> Without this backup you will permanently lose access to your account if you lose this device or clear browser data.</p>
+
+  <div class="actions">
+    <button id="confirmYes" class="primary">Yes, I saved it securely</button>
+    <button id="confirmNo" class="danger">No, let me download again</button>
+  </div>
+</div>
+
+<div id="mapScreen" class="result">
+  <h2>Your Approximate Location on US Map</h2>
+  <p>Blue dot = estimated location (browser geolocation preferred, falls back to IP)</p>
+  <div id="usMapContainer"></div>
+
+  <div class="actions">
+    <button onclick="restartApp()" class="secondary">Generate Another Key</button>
+  </div>
 </div>
 
 <script>
+// ======================================================================
 "use strict";
 var NostrTools = (() => {
   var __defProp = Object.defineProperty;
@@ -7627,77 +7660,136 @@ var NostrTools = (() => {
     return true;
   }
   return __toCommonJS(nostr_tools_exports);
-})();
 
-// Debug helper
-function log(msg) {
-  console.log("[NostrKeyGen Debug] " + msg);
-  document.getElementById('debugLog').innerHTML += '<br>' + msg;
-}
-
-log("Script started. Checking if NostrTools is defined...");
-
-if (typeof NostrTools !== 'undefined') {
-  log("NostrTools detected → bundle seems loaded.");
-  if (typeof NostrTools.generateSecretKey === 'function') {
-    log("generateSecretKey() exists → ready to generate keys.");
-    document.getElementById('status').textContent = 'Bundle loaded successfully! Ready to generate.';
-  } else {
-    log("NostrTools exists but missing generateSecretKey → wrong/incomplete bundle.");
-    document.getElementById('status').textContent = 'Bundle loaded but incomplete/mismatched version.';
-  }
-} else {
-  log("NostrTools is undefined → bundle paste failed or incomplete.");
-  document.getElementById('status').textContent = 'Bundle NOT loaded. Paste failed.';
-}
+// ======================================================================
 
 function generateKey() {
-  const status = document.getElementById('status');
   const btn = document.getElementById('generateBtn');
+  const status = document.getElementById('status');
   btn.disabled = true;
-  status.textContent = 'Attempting to generate...';
+  status.textContent = 'Generating secure key...';
 
-  log("generateKey() called");
-
-  if (typeof NostrTools === 'undefined') {
-    status.textContent = 'Error: nostr-tools not loaded (NostrTools undefined)';
-    log("→ NostrTools undefined");
-    btn.disabled = false;
-    return;
-  }
-
-  if (typeof NostrTools.generateSecretKey !== 'function') {
-    status.textContent = 'Error: generateSecretKey missing (wrong bundle version?)';
-    log("→ generateSecretKey not a function");
+  if (typeof NostrTools === 'undefined' || typeof NostrTools.generateSecretKey !== 'function') {
+    status.textContent = 'Error: nostr-tools bundle not loaded. Paste failed or incomplete.';
+    console.error('NostrTools missing or incomplete');
     btn.disabled = false;
     return;
   }
 
   try {
-    log("Calling generateSecretKey()");
     const secretKey = NostrTools.generateSecretKey();
-    log("Secret key generated");
-
-    const pubkey = NostrTools.getPublicKey(secretKey);
-    log("Pubkey computed");
-
-    const nsec = NostrTools.nip19.nsecEncode(secretKey);
-    const npub = NostrTools.nip19.npubEncode(pubkey);
-    log("nsec/npub encoded");
+    const pubkey   = NostrTools.getPublicKey(secretKey);
+    const nsec     = NostrTools.nip19.nsecEncode(secretKey);
+    const npub     = NostrTools.nip19.npubEncode(pubkey);
 
     document.getElementById('nsec').textContent = nsec;
     document.getElementById('npub').textContent = npub;
 
-    document.getElementById('result').style.display = 'block';
-    status.textContent = 'Success! Key generated.';
-    log("→ Generation success");
+    document.getElementById('result').style.display       = 'block';
+    document.getElementById('confirmation').style.display = 'none';
+    document.getElementById('mapScreen').style.display    = 'none';
+
+    status.textContent = 'Key generated! Please create a backup.';
   } catch (err) {
-    status.textContent = 'Generation failed: ' + err.message;
-    log("→ Error: " + err.message + " / " + err.stack);
+    status.textContent = 'Error: ' + err.message;
     console.error(err);
   } finally {
     btn.disabled = false;
   }
+}
+
+function downloadBackup() {
+  const nsec = document.getElementById('nsec').textContent;
+  const npub = document.getElementById('npub').textContent;
+  if (!nsec) return alert('No key generated yet.');
+
+  const text = `Nostr Key Backup - ${new Date().toISOString()}
+Secret Key (nsec): ${nsec}
+Public Key (npub): ${npub}
+
+⚠️ NEVER share your nsec! Store offline securely.`;
+
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'nostr-key-backup.txt';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  document.getElementById('result').style.display = 'none';
+  document.getElementById('confirmation').style.display = 'block';
+  document.getElementById('status').textContent = 'Please confirm you saved the backup.';
+}
+
+function copyNsec() {
+  const text = document.getElementById('nsec').textContent;
+  if (text) navigator.clipboard.writeText(text).then(() => alert('nsec copied!'));
+}
+
+document.getElementById('confirmYes').onclick = () => {
+  document.getElementById('confirmation').style.display = 'none';
+  document.getElementById('mapScreen').style.display = 'block';
+  document.getElementById('status').textContent = 'Backup confirmed → showing location map.';
+  loadUSMapWithLocation();
+};
+
+document.getElementById('confirmNo').onclick = () => {
+  document.getElementById('confirmation').style.display = 'none';
+  document.getElementById('result').style.display = 'block';
+  document.getElementById('status').textContent = 'Back to key. Please download and save the file.';
+};
+
+function loadUSMapWithLocation() {
+  const container = document.getElementById('usMapContainer');
+  const map = L.map(container).setView([37.8, -96], 4);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+  }).addTo(map);
+
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const { latitude, longitude } = pos.coords;
+        L.circleMarker([latitude, longitude], { radius: 12, color: 'blue', fillColor: 'blue', fillOpacity: 0.7 })
+          .addTo(map)
+          .bindPopup('Your location (browser geolocation)');
+        map.setView([latitude, longitude], 7);
+      },
+      () => fallbackToIP(map),
+      { timeout: 10000 }
+    );
+  } else {
+    fallbackToIP(map);
+  }
+}
+
+function fallbackToIP(map) {
+  fetch('https://ipapi.co/json/')
+    .then(res => res.json())
+    .then(data => {
+      if (data.latitude && data.longitude) {
+        L.circleMarker([data.latitude, data.longitude], { radius: 12, color: 'blue', fillColor: 'blue', fillOpacity: 0.7 })
+          .addTo(map)
+          .bindPopup(`Approx: ${data.city || 'Unknown'}, ${data.region || 'US'} (IP)`);
+        map.setView([data.latitude, data.longitude], 6);
+      } else {
+        showNoLocation(map);
+      }
+    })
+    .catch(() => showNoLocation(map));
+}
+
+function showNoLocation(map) {
+  map.setView([39.8283, -98.5795], 4);
+  alert('Could not determine your location.');
+}
+
+function restartApp() {
+  location.reload();
 }
 </script>
 </body>
