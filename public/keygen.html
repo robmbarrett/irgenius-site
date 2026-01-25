@@ -35,7 +35,7 @@
       border: 1px solid #ccc; 
       border-radius: 8px; 
       overflow: hidden;
-      background: #e0f7fa;          /* light color to confirm container is visible */
+      background: #e0f7fa;
     }
   </style>
 </head>
@@ -56,7 +56,6 @@
 
   <div class="actions">
     <button onclick="downloadBackup()" class="primary">Download Backup (.txt)</button>
-    <!-- Copy nsec button removed -->
   </div>
 </div>
 
@@ -75,11 +74,11 @@
   <h2>Your Approximate Location</h2>
   <p>Blue dot = estimated location (browser geolocation preferred, falls back to IP)</p>
   <div id="usMapContainer"></div>
-  <!-- Generate Another Key button removed -->
 </div>
 
 <script>
-let mapInstance = null;  // global so we can access for polling
+let mapInstance = null;
+let initialMapCreated = false;
 
 function generateKey() {
   const btn = document.getElementById('generateBtn');
@@ -145,7 +144,9 @@ Public Key (npub): ${npub}
 
 document.getElementById('confirmYes').onclick = () => {
   document.getElementById('confirmation').style.display = 'none';
-  document.getElementById('mapScreen').style.display = 'block';
+  const mapScreen = document.getElementById('mapScreen');
+  mapScreen.style.display = 'block';
+  mapScreen.offsetHeight;  // Force reflow
   document.getElementById('status').textContent = 'Backup confirmed → showing location map.';
   loadUSMapWithLocation();
 };
@@ -156,29 +157,41 @@ document.getElementById('confirmNo').onclick = () => {
   document.getElementById('status').textContent = 'Back to key. Please download and save the file.';
 };
 
-function loadUSMapWithLocation() {
+function createMapIfNeeded() {
+  if (initialMapCreated) return;
   const container = document.getElementById('usMapContainer');
-
   mapInstance = L.map('usMapContainer').setView([37.8, -96], 4);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
   }).addTo(mapInstance);
 
-  // Start polling to invalidate size until container has real dimensions
-  const pollInterval = setInterval(() => {
-    if (mapInstance && container.clientWidth > 10 && container.clientHeight > 10) {
-      mapInstance.invalidateSize(true);
-      clearInterval(pollInterval);
-    }
-  }, 100);  // check every 100ms
-
-  // Initial invalidate with delay
+  // Initial force redraw
   setTimeout(() => {
     if (mapInstance) mapInstance.invalidateSize(true);
-  }, 300);
+  }, 400);
 
-  // Window resize handling
+  initialMapCreated = true;
+}
+
+// Call early (on load)
+window.addEventListener('load', createMapIfNeeded);
+
+function loadUSMapWithLocation() {
+  if (!mapInstance) {
+    createMapIfNeeded();
+  }
+
+  // Polling fallback if size still zero
+  const poll = setInterval(() => {
+    const cont = document.getElementById('usMapContainer');
+    if (cont.clientHeight > 100 && cont.clientWidth > 100) {
+      mapInstance.invalidateSize(true);
+      clearInterval(poll);
+    }
+  }, 150);
+
+  // Window resize
   window.addEventListener('resize', () => {
     if (mapInstance) mapInstance.invalidateSize();
   });
@@ -199,9 +212,8 @@ function loadUSMapWithLocation() {
 
         mapInstance.setView([latitude, longitude], 7);
 
-        setTimeout(() => {
-          if (mapInstance) mapInstance.invalidateSize();
-        }, 200);
+        setTimeout(() => mapInstance.invalidateSize(true), 200);
+        clearInterval(poll);  // stop polling once we have data
       },
       () => fallbackToIP(mapInstance),
       { timeout: 10000 }
@@ -211,6 +223,7 @@ function loadUSMapWithLocation() {
   }
 }
 
+// fallbackToIP and showNoLocation unchanged, but add invalidateSize calls as before
 function fallbackToIP(map) {
   fetch('https://ipapi.co/json/')
     .then(res => res.json())
@@ -227,8 +240,7 @@ function fallbackToIP(map) {
           .bindPopup(`Approx: ${data.city || 'Unknown'}, ${data.region || 'US'} (IP)`);
 
         map.setView([data.latitude, data.longitude], 6);
-
-        setTimeout(() => map.invalidateSize(), 200);
+        setTimeout(() => map.invalidateSize(true), 200);
       } else {
         showNoLocation(map);
       }
@@ -238,7 +250,7 @@ function fallbackToIP(map) {
 
 function showNoLocation(map) {
   map.setView([39.8283, -98.5795], 4);
-  setTimeout(() => map.invalidateSize(), 200);
+  setTimeout(() => map.invalidateSize(true), 200);
   alert('Could not determine your location.');
 }
 </script>
