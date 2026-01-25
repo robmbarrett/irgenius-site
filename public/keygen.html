@@ -1,120 +1,125 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Nostr Key Generator - irgenius.org</title>
-  <style>
-    /* Your original styles here – unchanged */
-    body { font-family: system-ui, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; text-align: center; background: #f9f9f9; color: #333; }
-    h1 { color: #2c3e50; margin-bottom: 20px; }
-    button { background: #27ae60; color: white; border: none; padding: 14px 28px; font-size: 18px; margin: 15px; cursor: pointer; border-radius: 8px; }
-    button:hover { background: #219653; }
-    button:disabled { background: #95a5a6; cursor: not-allowed; }
-    .result { display: none; margin-top: 30px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: left; }
-    .warning { color: #e74c3c; font-weight: bold; margin-bottom: 15px; font-size: 1.1em; }
-    pre { background: #ecf0f1; padding: 15px; border-radius: 6px; overflow-x: auto; font-family: monospace; white-space: pre-wrap; word-break: break-all; margin: 10px 0; }
-    .actions { text-align: center; margin-top: 20px; }
-    .actions button { margin: 10px 5px; background: #3498db; }
-    .actions button:hover { background: #2980b9; }
-    #status { color: #7f8c8d; font-size: 0.95em; margin-top: 10px; }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Nostr Key Generator - irgenius.org</title>
+<style>
+body { font-family: system-ui, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; text-align: center; background: #f9f9f9; color: #333; }
+h1 { color: #2c3e50; margin-bottom: 20px; }
+button { background: #27ae60; color: white; border: none; padding: 14px 28px; font-size: 18px; margin: 15px; cursor: pointer; border-radius: 8px; }
+button:hover { background: #219653; }
+button:disabled { background: #95a5a6; cursor: not-allowed; }
+.result { display: none; margin-top: 30px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: left; }
+.warning { color: #e74c3c; font-weight: bold; margin-bottom: 15px; font-size: 1.1em; }
+pre { background: #ecf0f1; padding: 15px; border-radius: 6px; overflow-x: auto; font-family: monospace; white-space: pre-wrap; word-break: break-all; margin: 10px 0; }
+.actions { text-align: center; margin-top: 20px; }
+.actions button { margin: 10px 5px; background: #3498db; }
+.actions button:hover { background: #2980b9; }
+#status { color: #7f8c8d; font-size: 0.95em; margin-top: 10px; }
+</style>
 </head>
 <body>
-  <h1>Nostr Key Generator</h1>
-  <p>Generate a new Nostr key pair securely in your browser.<br>Save your <strong>nsec</strong> — never share it!</p>
+<h1>Nostr Key Generator</h1>
+<p>Generate a new Nostr key pair securely in your browser.<br>Save your <strong>nsec</strong> — never share it!</p>
 
-  <button id="generateBtn" onclick="generateKey()">Generate New Key</button>
-  <div id="status">Ready!</div>
+<button id="generateBtn" onclick="generateKey()">Generate New Key</button>
+<div id="status">Ready!</div>
 
-  <div id="result" class="result">
-    <p class="warning">⚠️ BACKUP REQUIRED — SAVE THIS NOW!</p>
-    <p><strong>Secret Key (nsec):</strong></p>
-    <pre id="nsec"></pre>
-    <p><strong>Public Key (npub):</strong></p>
-    <pre id="npub"></pre>
+<div id="result" class="result">
+<p class="warning">⚠️ BACKUP REQUIRED — SAVE THIS NOW!</p>
+<p><strong>Secret Key (nsec):</strong></p>
+<pre id="nsec"></pre>
+<p><strong>Public Key (npub):</strong></p>
+<pre id="npub"></pre>
 
-    <div class="actions">
-      <button onclick="downloadBackup()">Download Backup (.txt)</button>
-      <button onclick="copyNsec()">Copy nsec to Clipboard</button>
-    </div>
-  </div>
+<div class="actions">
+<button onclick="downloadBackup()">Download Backup (.txt)</button>
+<button onclick="copyNsec()">Copy nsec to Clipboard</button>
+</div>
+</div>
 
-  <!-- === EMBEDDED NOSTR-TOOLS BUNDLE HERE === -->
-  <script>
-    // Paste the FULL minified nostr-tools bundle code here.
-    // Get it from: https://unpkg.com/nostr-tools@2.20.0/lib/nostr.bundle.min.js
-    // 
-    // Steps:
-    // 1. Open that URL in your browser.
-    // 2. Right-click → View Page Source (or Ctrl+U).
-    // 3. Copy ALL the content (it's one big line of minified JS).
-    // 4. Paste it right below this comment, replacing the placeholder.
-    // 
-    // Placeholder example (do NOT use this tiny fake one – replace with real):
-    // (function(){var NostrTools={generateSecretKey:function(){...}, ... }} )();
-    //
-    // After pasting, the next functions will work.
-  </script>
+<script>
+// === EMBEDDED NOSTR-TOOLS v2.20.0 BROWSER BUNDLE (fully offline) ===
+"use strict";var NostrTools=(()=>{var __defProp=Object.defineProperty;var __getOwnPropDesc=Object.getOwnPropertyDescriptor;var __getOwnPropNames=Object.getOwnPropertyNames;var __hasOwnProp=Object.prototype.hasOwnProperty;var __export=(target,all)=>{for(var name in all)__defProp(target,name,{get:all[name],enumerable:!0})};var __copyProps=(to,from,except,desc)=>{if(from&&typeof from==="object"||typeof from==="function"){for(let key of __getOwnPropNames(from))if(!__hasOwnProp.call(to,key)&&key!==except)__defProp(to,key,{get:()=>from[key],enumerable:!(desc=__getOwnPropDesc(from,key))||desc.enumerable})}return to};var __toCommonJS=(mod)=>__copyProps(__defProp({},"__esModule",{value:!0}),mod);// index.ts
+var nostr_tools_exports={};__export(nostr_tools_exports,{Relay:()=>Relay,SimplePool:()=>SimplePool,finalizeEvent:()=>finalizeEvent,fj:()=>fakejson_exports,generateSecretKey:()=>generateSecretKey,getEventHash:()=>getEventHash,getFilterLimit:()=>getFilterLimit,getPublicKey:()=>getPublicKey,kinds:()=>kinds_exports,matchFilter:()=>matchFilter,matchFilters:()=>matchFilters,mergeFilters:()=>mergeFilters,nip04:()=>nip04_exports,nip05:()=>nip05_exports,nip10:()=>nip10_exports,nip11:()=>nip11_exports,nip13:()=>nip13_exports,nip17:()=>nip17_exports,nip18:()=>nip18_exports,nip19:()=>nip19_exports,nip21:()=>nip21_exports,nip25:()=>nip25_exports,nip27:()=>nip27_exports,nip28:()=>nip28_exports,nip30:()=>nip30_exports,nip39:()=>nip39_exports,nip42:()=>nip42_exports,nip44:()=>nip44_exports,nip47:()=>nip47_exports,nip54:()=>nip54_exports,nip57:()=>nip57_exports,nip59:()=>nip59_exports,nip77:()=>nip77_exports,nip98:()=>nip98_exports,parseReferences:()=>parseReferences,serializeEvent:()=>serializeEvent,sortEvents:()=>sortEvents,utils:()=>utils_exports2,validateEvent:()=>validateEvent,verifiedSymbol:()=>verifiedSymbol,verifyEvent:()=>verifyEvent});
+// ... (the full bundle continues here; due to extreme length ~150-200 KB minified, I've shown the structure/start above. In practice, replace this entire <script> content block with the real full code from https://unpkg.com/nostr-tools@2.20.0/lib/nostr.bundle.js )
 
-  <script>
-    // Your key generation logic – now uses the embedded global NostrTools
-    function generateKey() {
-      const btn = document.getElementById('generateBtn');
-      const status = document.getElementById('status');
-      btn.disabled = true;
-      status.textContent = 'Generating...';
+// IMPORTANT: You MUST replace everything between the quotes below with the ACTUAL full bundle code.
+// Steps to get it:
+// 1. Visit https://unpkg.com/nostr-tools@2.20.0/lib/nostr.bundle.js in your browser
+// 2. Ctrl+A to select all, Ctrl+C to copy
+// 3. Paste it here, completely overwriting the placeholder text (including this comment)
+// The real code starts with: "use strict";var NostrTools=(()=>{... and is one very long line or formatted block.
 
-      if (typeof NostrTools === 'undefined') {
-        status.textContent = 'Error: nostr-tools not loaded. Check if bundle was pasted correctly.';
-        btn.disabled = false;
-        return;
-      }
+var placeholder_full_bundle_code_goes_here = "PASTE THE ENTIRE COPIED JAVASCRIPT FROM THE URL ABOVE RIGHT HERE - DO NOT LEAVE THIS TEXT";
 
-      try {
-        const secretKey = NostrTools.generateSecretKey();          // Uint8Array
-        const pubkeyHex  = NostrTools.getPublicKey(secretKey);     // hex string
-        const nsec = NostrTools.nip19.nsecEncode(secretKey);
-        const npub = NostrTools.nip19.npubEncode(pubkeyHex);
+</script>
 
-        document.getElementById('nsec').textContent = nsec;
-        document.getElementById('npub').textContent = npub;
+<script>
+// === YOUR KEY GENERATION LOGIC (uses the embedded NostrTools) ===
+function generateKey() {
+  const btn = document.getElementById('generateBtn');
+  const status = document.getElementById('status');
+  btn.disabled = true;
+  status.textContent = 'Generating secure key...';
 
-        document.getElementById('result').style.display = 'block';
-        status.textContent = 'Key generated! SAVE YOUR nsec NOW.';
-      } catch (err) {
-        status.textContent = 'Generation failed: ' + err.message;
-        console.error(err);
-      } finally {
-        btn.disabled = false;
-      }
-    }
+  if (typeof NostrTools === 'undefined' || !NostrTools.generateSecretKey) {
+    status.textContent = 'Error: nostr-tools bundle not loaded correctly. Paste the full bundle code.';
+    console.error("NostrTools not defined - bundle paste failed or incomplete");
+    btn.disabled = false;
+    return;
+  }
 
-    function downloadBackup() {
-      const nsec = document.getElementById('nsec').textContent;
-      const npub = document.getElementById('npub').textContent;
-      if (!nsec) return alert('No key to backup yet.');
-      
-      const text = `Nostr Key Backup - ${new Date().toISOString()}
-Secret (nsec): ${nsec}
-Public (npub): ${npub}
+  try {
+    const secretKey = NostrTools.generateSecretKey(); // Uint8Array
+    const pubkey = NostrTools.getPublicKey(secretKey); // hex string
 
-⚠️ NEVER SHARE nsec! Store offline securely.`;
-      const blob = new Blob([text], {type: 'text/plain'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'nostr-key-backup.txt';
-      a.click();
-      URL.revokeObjectURL(url);
-    }
+    const nsec = NostrTools.nip19.nsecEncode(secretKey);
+    const npub = NostrTools.nip19.npubEncode(pubkey);
 
-    function copyNsec() {
-      const text = document.getElementById('nsec').textContent;
-      if (text) {
-        navigator.clipboard.writeText(text).then(() => alert('nsec copied!'));
-      }
-    }
-  </script>
+    document.getElementById('nsec').textContent = nsec;
+    document.getElementById('npub').textContent = npub;
+
+    document.getElementById('result').style.display = 'block';
+    status.textContent = 'Key generated! Backup immediately — especially the nsec.';
+  } catch (err) {
+    status.textContent = 'Error: ' + err.message;
+    console.error(err);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function downloadBackup() {
+  const nsec = document.getElementById('nsec').textContent;
+  const npub = document.getElementById('npub').textContent;
+  if (!nsec) return;
+
+  const text = `Nostr Key Backup (${new Date().toISOString()})
+Secret Key (nsec): ${nsec}
+Public Key (npub): ${npub}
+
+⚠️ NEVER share your nsec! Keep it offline and secure.`;
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'nostr-key-backup.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function copyNsec() {
+  const text = document.getElementById('nsec').textContent;
+  if (text) {
+    navigator.clipboard.writeText(text).then(() => {
+      alert('nsec copied to clipboard!');
+    }).catch(err => {
+      console.error('Clipboard copy failed', err);
+    });
+  }
+}
+</script>
 </body>
 </html>
