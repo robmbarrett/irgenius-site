@@ -35,13 +35,13 @@
       text-align: center;
     }
     #map {
-      height: 500px;                /* Increased slightly for better visibility */
+      height: 500px;
       width: 100%;
       max-width: 800px;
       margin: 20px auto;
       border: 1px solid #ddd;
       border-radius: 8px;
-      background: #e0f0ff;          /* Light blue bg helps debug if tiles fail */
+      background: #e0f0ff;
     }
     #status {
       font-style: italic;
@@ -119,10 +119,10 @@
     <div id="map"></div>
   </div>
 
-  <!-- LIBRARIES (loaded at bottom) -->
+  <!-- LIBRARIES (bottom) -->
 
-  <!-- nostr-tools -->
-  <script src="https://unpkg.com/nostr-tools@2.*/lib/nostr.bundle.min.js"></script>
+  <!-- nostr-tools via jsDelivr (more reliable than unpkg) -->
+  <script src="https://cdn.jsdelivr.net/npm/nostr-tools@2.*/lib/nostr.bundle.min.js"></script>
 
   <!-- qrcode.js -->
   <script src="https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js"></script>
@@ -135,31 +135,41 @@
 
   <!-- Main script -->
   <script>
+    // Quick check if nostr-tools loaded
+    if (typeof nostrTools === 'undefined') {
+      alert('Error: nostr-tools library failed to load. Check browser console (F12) for network errors on the CDN script. Try refreshing or a different browser.');
+    }
+
     let map = null;
     let userMarker = null;
 
     // Generate key pair
     document.getElementById('generateBtn').addEventListener('click', () => {
-      const priv = nostrTools.generatePrivateKey();
-      const pub  = nostrTools.getPublicKey(priv);
+      try {
+        const priv = nostrTools.generatePrivateKey();
+        const pub  = nostrTools.getPublicKey(priv);
 
-      const npub = nostrTools.npubEncode(pub);
-      const nsec = nostrTools.nsecEncode(priv);
+        const npub = nostrTools.npubEncode(pub);
+        const nsec = nostrTools.nsecEncode(priv);
 
-      document.getElementById('npub').textContent = npub;
-      document.getElementById('nsec').textContent = nsec;
+        document.getElementById('npub').textContent = npub;
+        document.getElementById('nsec').textContent = nsec;
 
-      document.getElementById('output').style.display = 'block';
+        document.getElementById('output').style.display = 'block';
 
-      QRCode.toCanvas(document.getElementById('qr-npub'), npub, { width: 180 }, err => {
-        if (err) console.error(err);
-      });
-      QRCode.toCanvas(document.getElementById('qr-nsec'), nsec, { width: 180 }, err => {
-        if (err) console.error(err);
-      });
+        QRCode.toCanvas(document.getElementById('qr-npub'), npub, { width: 180 }, err => {
+          if (err) console.error('QR npub error:', err);
+        });
+        QRCode.toCanvas(document.getElementById('qr-nsec'), nsec, { width: 180 }, err => {
+          if (err) console.error('QR nsec error:', err);
+        });
+      } catch (err) {
+        console.error('Key generation failed:', err);
+        alert('Failed to generate key – check console (F12) for details. Likely library load issue.');
+      }
     });
 
-    // Show blue dot + fix quartered map issue
+    // Show blue dot + map fix
     document.getElementById('showLocationBtn').addEventListener('click', () => {
       const status = document.getElementById('status');
       status.textContent = 'Requesting location...';
@@ -185,12 +195,9 @@
               maxZoom: 19
             }).addTo(map);
 
-            // FIX for partial/quartered tiles: force re-calculation after render
             setTimeout(() => {
-              if (map) {
-                map.invalidateSize(true);
-              }
-            }, 200);  // 200ms delay usually sufficient
+              if (map) map.invalidateSize(true);
+            }, 200);
           } else {
             map.setView([lat, lng], 14);
             map.invalidateSize();
