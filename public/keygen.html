@@ -35,7 +35,7 @@
       border: 1px solid #ccc; 
       border-radius: 8px; 
       overflow: hidden;
-      background: #e0f7fa;          /* helps debug container visibility */
+      background: #e0f7fa;          /* light color to confirm container is visible */
     }
   </style>
 </head>
@@ -56,7 +56,7 @@
 
   <div class="actions">
     <button onclick="downloadBackup()" class="primary">Download Backup (.txt)</button>
-    <!-- Removed: Copy nsec to Clipboard button -->
+    <!-- Copy nsec button removed -->
   </div>
 </div>
 
@@ -75,10 +75,12 @@
   <h2>Your Approximate Location</h2>
   <p>Blue dot = estimated location (browser geolocation preferred, falls back to IP)</p>
   <div id="usMapContainer"></div>
-  <!-- Removed: Generate Another Key button -->
+  <!-- Generate Another Key button removed -->
 </div>
 
 <script>
+let mapInstance = null;  // global so we can access for polling
+
 function generateKey() {
   const btn = document.getElementById('generateBtn');
   const status = document.getElementById('status');
@@ -157,20 +159,28 @@ document.getElementById('confirmNo').onclick = () => {
 function loadUSMapWithLocation() {
   const container = document.getElementById('usMapContainer');
 
-  const map = L.map('usMapContainer').setView([37.8, -96], 4);
+  mapInstance = L.map('usMapContainer').setView([37.8, -96], 4);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-  }).addTo(map);
+  }).addTo(mapInstance);
 
-  // Force correct sizing (fixes quartered tiles in most cases)
+  // Start polling to invalidate size until container has real dimensions
+  const pollInterval = setInterval(() => {
+    if (mapInstance && container.clientWidth > 10 && container.clientHeight > 10) {
+      mapInstance.invalidateSize(true);
+      clearInterval(pollInterval);
+    }
+  }, 100);  // check every 100ms
+
+  // Initial invalidate with delay
   setTimeout(() => {
-    map.invalidateSize(true);
-  }, 200);
+    if (mapInstance) mapInstance.invalidateSize(true);
+  }, 300);
 
-  // Handle window resize
+  // Window resize handling
   window.addEventListener('resize', () => {
-    map.invalidateSize();
+    if (mapInstance) mapInstance.invalidateSize();
   });
 
   if (navigator.geolocation) {
@@ -184,17 +194,20 @@ function loadUSMapWithLocation() {
           fillOpacity: 0.7,
           className: 'pulsing-dot'
         })
-          .addTo(map)
+          .addTo(mapInstance)
           .bindPopup('Your location (browser geolocation)');
 
-        map.setView([latitude, longitude], 7);
-        setTimeout(() => map.invalidateSize(), 150);
+        mapInstance.setView([latitude, longitude], 7);
+
+        setTimeout(() => {
+          if (mapInstance) mapInstance.invalidateSize();
+        }, 200);
       },
-      () => fallbackToIP(map),
+      () => fallbackToIP(mapInstance),
       { timeout: 10000 }
     );
   } else {
-    fallbackToIP(map);
+    fallbackToIP(mapInstance);
   }
 }
 
@@ -214,7 +227,8 @@ function fallbackToIP(map) {
           .bindPopup(`Approx: ${data.city || 'Unknown'}, ${data.region || 'US'} (IP)`);
 
         map.setView([data.latitude, data.longitude], 6);
-        setTimeout(() => map.invalidateSize(), 150);
+
+        setTimeout(() => map.invalidateSize(), 200);
       } else {
         showNoLocation(map);
       }
@@ -224,7 +238,7 @@ function fallbackToIP(map) {
 
 function showNoLocation(map) {
   map.setView([39.8283, -98.5795], 4);
-  setTimeout(() => map.invalidateSize(), 150);
+  setTimeout(() => map.invalidateSize(), 200);
   alert('Could not determine your location.');
 }
 </script>
