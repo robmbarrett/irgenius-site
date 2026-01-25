@@ -3,238 +3,427 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Nostr Key Generator</title>
-  <style>
-    body {
-      font-family: system-ui, -apple-system, sans-serif;
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 20px;
-      line-height: 1.5;
-    }
-    h1, h2 {
-      text-align: center;
-    }
-    #output {
-      margin: 30px 0;
-      padding: 20px;
-      background: #f8f9fa;
-      border-radius: 8px;
-      word-break: break-all;
-    }
-    .key-label {
-      font-weight: bold;
-      margin-right: 10px;
-    }
-    .qr-container {
-      text-align: center;
-      margin: 20px 0;
-    }
-    #map-container {
-      margin: 40px 0;
-      text-align: center;
-    }
-    #map {
-      height: 500px;
-      width: 100%;
-      max-width: 800px;
-      margin: 20px auto;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      background: #e0f0ff;
-    }
-    #status {
-      font-style: italic;
-      color: #555;
-      margin: 10px 0;
-    }
-    button {
-      padding: 12px 24px;
-      margin: 8px;
-      font-size: 1rem;
-      cursor: pointer;
-      border: none;
-      border-radius: 6px;
-      background: #0066cc;
-      color: white;
-    }
-    button:hover {
-      background: #0055aa;
-    }
-    button:disabled {
-      background: #aaa;
-      cursor: not-allowed;
-    }
+  <title>Nostr Key Generator - irgenius.org</title>
 
-    @keyframes pulse {
-      0%   { transform: scale(1);    opacity: 1; }
-      50%  { transform: scale(1.35); opacity: 0.4; }
-      100% { transform: scale(1);    opacity: 1; }
-    }
-    .pulsing-dot {
-      animation: pulse 2s infinite ease-in-out;
-    }
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5n/N0RDwH4=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <!-- nostr-tools from official CDN -->
+  <script src="https://unpkg.com/nostr-tools@2.11.0/lib/nostr.bundle.js"></script>
+
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; text-align: center; background: #f9f9f9; color: #333; }
+    h1, h2 { color: #2c3e50; margin-bottom: 20px; }
+    button { color: white; border: none; padding: 14px 28px; font-size: 18px; margin: 10px; cursor: pointer; border-radius: 8px; }
+    button.primary   { background: #27ae60; }
+    button.primary:hover   { background: #219653; }
+    button.primary:disabled { background: #95a5a6; cursor: not-allowed; }
+    button.secondary { background: #3498db; }
+    button.secondary:hover { background: #2980b9; }
+    button.danger    { background: #e74c3c; }
+    button.danger:hover    { background: #c0392b; }
+    .result, #confirmation, #mapScreen { display: none; margin-top: 30px; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: left; }
+    .warning { color: #e74c3c; font-weight: bold; margin-bottom: 15px; font-size: 1.1em; }
+    pre { background: #ecf0f1; padding: 15px; border-radius: 6px; overflow-x: auto; font-family: monospace; white-space: pre-wrap; word-break: break-all; margin: 10px 0; }
+    .actions { text-align: center; margin-top: 20px; }
+    #status { color: #7f8c8d; font-size: 0.95em; margin-top: 10px; }
+    #usMapContainer { width: 100%; height: 450px; border: 1px solid #ccc; border-radius: 8px; overflow: hidden; }
   </style>
 </head>
 <body>
 
-  <h1>Nostr Key Generator</h1>
+<h1>Nostr Key Generator</h1>
+<p>Generate a new Nostr key pair securely in your browser.<br><strong>Save your nsec</strong> — never share it!</p>
 
-  <p style="text-align:center; color:#555;">
-    Generate a fresh Nostr key pair securely in your browser.<br>
-    <strong>Save your nsec!</strong> It cannot be recovered if lost.
-  </p>
+<button id="generateBtn" class="primary" onclick="generateKey()">Generate New Key</button>
+<div id="status">Ready!</div>
 
-  <div style="text-align:center; margin:30px 0;">
-    <button id="generateBtn">Generate New Key Pair</button>
+<div id="result" class="result">
+  <p class="warning">⚠️ BACKUP REQUIRED — SAVE THIS NOW!</p>
+  <p><strong>Secret Key (nsec):</strong></p>
+  <pre id="nsec"></pre>
+  <p><strong>Public Key (npub):</strong></p>
+  <pre id="npub"></pre>
+
+  <div class="actions">
+    <button onclick="downloadBackup()" class="primary">Download Backup (.txt)</button>
+    <button onclick="copyNsec()" class="secondary">Copy nsec to Clipboard</button>
   </div>
+</div>
 
-  <div id="output" style="display:none;">
-    <p><span class="key-label">npub:</span> <span id="npub"></span></p>
-    <p><span class="key-label">nsec:</span> <span id="nsec"></span></p>
+<div id="confirmation" class="result">
+  <h2>Backup Confirmation</h2>
+  <p class="warning">Did you successfully download and save the <code>nostr-key-backup.txt</code> file?</p>
+  <p><strong>Important:</strong> Without this backup you will permanently lose access to your account if you lose this device or clear browser data.</p>
 
-    <div class="qr-container">
-      <div>
-        <strong>npub QR</strong><br>
-        <canvas id="qr-npub"></canvas>
-      </div>
-      <div style="margin-top:20px;">
-        <strong>nsec QR</strong><br>
-        <canvas id="qr-nsec"></canvas>
-      </div>
-    </div>
+  <div class="actions">
+    <button id="confirmYes" class="primary">Yes, I saved it securely</button>
+    <button id="confirmNo" class="danger">No, let me download again</button>
   </div>
+</div>
 
-  <div id="map-container">
-    <h2>Your Approximate Location</h2>
-    <p style="color:#666; margin-bottom:10px;">
-      Click below to see a blue dot showing your approximate location.<br>
-      (Only used locally in browser — permission required)
-    </p>
+<div id="mapScreen" class="result">
+  <h2>Your Approximate Location on US Map</h2>
+  <p>Blue dot = estimated location (browser geolocation preferred, falls back to IP)</p>
+  <div id="usMapContainer"></div>
 
-    <div id="status">Location not requested yet</div>
-
-    <button id="showLocationBtn">Show My Location</button>
-
-    <div id="map"></div>
+  <div class="actions">
+    <button onclick="restartApp()" class="secondary">Generate Another Key</button>
   </div>
+</div>
 
-  <!-- LIBRARIES (bottom) -->
+<script>
+function generateKey() {
+  const btn = document.getElementById('generateBtn');
+  const status = document.getElementById('status');
+  btn.disabled = true;
+  status.textContent = 'Generating secure key...';
 
-  <!-- nostr-tools via jsDelivr (more reliable than unpkg) -->
-  <script src="https://cdn.jsdelivr.net/npm/nostr-tools@2.*/lib/nostr.bundle.min.js"></script>
+  // Debug: Check if library loaded
+  console.log('NostrTools type:', typeof NostrTools);
+  if (typeof NostrTools === 'undefined' || typeof NostrTools.generateSecretKey !== 'function') {
+    status.textContent = 'Error: nostr-tools library failed to load. Check console for details.';
+    console.error('NostrTools not available — possible CDN issue or network block');
+    btn.disabled = false;
+    return;
+  }
 
-  <!-- qrcode.js -->
-  <script src="https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js"></script>
+  try {
+    const secretKey = NostrTools.generateSecretKey();
+    const pubkey   = NostrTools.getPublicKey(secretKey);
+    const nsec     = NostrTools.nip19.nsecEncode(secretKey);
+    const npub     = NostrTools.nip19.npubEncode(pubkey);
 
-  <!-- Leaflet -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5n/N0aVIE=" crossorigin=""/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    document.getElementById('nsec').textContent = nsec;
+    document.getElementById('npub').textContent = npub;
 
-  <!-- Main script -->
-  <script>
-    // Quick check if nostr-tools loaded
-    if (typeof nostrTools === 'undefined') {
-      alert('Error: nostr-tools library failed to load. Check browser console (F12) for network errors on the CDN script. Try refreshing or a different browser.');
-    }
+    document.getElementById('result').style.display       = 'block';
+    document.getElementById('confirmation').style.display = 'none';
+    document.getElementById('mapScreen').style.display    = 'none';
 
-    let map = null;
-    let userMarker = null;
+    status.textContent = 'Key generated! Please create a backup.';
+  } catch (err) {
+    status.textContent = 'Error: ' + err.message;
+    console.error('Key generation failed:', err);
+  } finally {
+    btn.disabled = false;
+  }
+}
 
-    // Generate key pair
-    document.getElementById('generateBtn').addEventListener('click', () => {
-      try {
-        const priv = nostrTools.generatePrivateKey();
-        const pub  = nostrTools.getPublicKey(priv);
+// ... your other functions unchanged: downloadBackup, copyNsec, confirmYes/No handlers, map functions, restartApp ...
+// (paste the rest of your functions here from your original file)
 
-        const npub = nostrTools.npubEncode(pub);
-        const nsec = nostrTools.nsecEncode(priv);
+function downloadBackup() {
+  const nsec = document.getElementById('nsec').textContent;
+  const npub = document.getElementById('npub').textContent;
+  if (!nsec) return alert('No key generated yet.');
 
-        document.getElementById('npub').textContent = npub;
-        document.getElementById('nsec').textContent = nsec;
+  const text = `Nostr Key Backup - ${new Date().toISOString()}
+Secret Key (nsec): ${nsec}
+Public Key (npub): ${npub}
 
-        document.getElementById('output').style.display = 'block';
+⚠️ NEVER share your nsec! Store offline securely.`;
 
-        QRCode.toCanvas(document.getElementById('qr-npub'), npub, { width: 180 }, err => {
-          if (err) console.error('QR npub error:', err);
-        });
-        QRCode.toCanvas(document.getElementById('qr-nsec'), nsec, { width: 180 }, err => {
-          if (err) console.error('QR nsec error:', err);
-        });
-      } catch (err) {
-        console.error('Key generation failed:', err);
-        alert('Failed to generate key – check console (F12) for details. Likely library load issue.');
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'nostr-key-backup.txt';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  document.getElementById('result').style.display = 'none';
+  document.getElementById('confirmation').style.display = 'block';
+  document.getElementById('status').textContent = 'Please confirm you saved the backup.';
+}
+
+function copyNsec() {
+  const text = document.getElementById('nsec').textContent;
+  if (text) navigator.clipboard.writeText(text).then(() => alert('nsec copied!'));
+}
+
+document.getElementById('confirmYes').onclick = () => {
+  document.getElementById('confirmation').style.display = 'none';
+  document.getElementById('mapScreen').style.display = 'block';
+  document.getElementById('status').textContent = 'Backup confirmed → showing location map.';
+  loadUSMapWithLocation();
+};
+
+document.getElementById('confirmNo').onclick = () => {
+  document.getElementById('confirmation').style.display = 'none';
+  document.getElementById('result').style.display = 'block';
+  document.getElementById('status').textContent = 'Back to key. Please download and save the file.';
+};
+
+function loadUSMapWithLocation() {
+  const container = document.getElementById('usMapContainer');
+  const map = L.map(container).setView([37.8, -96], 4);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+  }).addTo(map);
+
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const { latitude, longitude } = pos.coords;
+        L.circleMarker([latitude, longitude], { radius: 12, color: 'blue', fillColor: 'blue', fillOpacity: 0.7 })
+          .addTo(map)
+          .bindPopup('Your location (browser geolocation)');
+        map.setView([latitude, longitude], 7);
+      },
+      () => fallbackToIP(map),
+      { timeout: 10000 }
+    );
+  } else {
+    fallbackToIP(map);
+  }
+}
+
+function fallbackToIP(map) {
+  fetch('https://ipapi.co/json/')
+    .then(res => res.json())
+    .then(data => {
+      if (data.latitude && data.longitude) {
+        L.circleMarker([data.latitude, data.longitude], { radius: 12, color: 'blue', fillColor: 'blue', fillOpacity: 0.7 })
+          .addTo(map)
+          .bindPopup(`Approx: ${data.city || 'Unknown'}, ${data.region || 'US'} (IP)`);
+        map.setView([data.latitude, data.longitude], 6);
+      } else {
+        showNoLocation(map);
       }
-    });
+    })
+    .catch(() => showNoLocation(map));
+}
 
-    // Show blue dot + map fix
-    document.getElementById('showLocationBtn').addEventListener('click', () => {
-      const status = document.getElementById('status');
-      status.textContent = 'Requesting location...';
-      status.style.color = '#555';
+function showNoLocation(map) {
+  map.setView([39.8283, -98.5795], 4);
+  alert('Could not determine your location.');
+}
 
-      if (!navigator.geolocation) {
-        status.textContent = 'Geolocation not supported.';
-        status.style.color = 'red';
-        return;
-      }
-
-      navigator.geolocation.getCurrentPosition(
-        pos => {
-          const lat = pos.coords.latitude;
-          const lng = pos.coords.longitude;
-          const acc = Math.round(pos.coords.accuracy);
-
-          if (!map) {
-            map = L.map('map').setView([lat, lng], 14);
-
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-              attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-              maxZoom: 19
-            }).addTo(map);
-
-            setTimeout(() => {
-              if (map) map.invalidateSize(true);
-            }, 200);
-          } else {
-            map.setView([lat, lng], 14);
-            map.invalidateSize();
-          }
-
-          if (userMarker) userMarker.remove();
-
-          userMarker = L.circleMarker([lat, lng], {
-            radius: 14,
-            fillColor: '#3388ff',
-            color: '#3388ff',
-            weight: 4,
-            opacity: 1,
-            fillOpacity: 0.7,
-            className: 'pulsing-dot'
-          }).addTo(map)
-            .bindPopup(`You are here (± ${acc} meters)`);
-
-          status.textContent = `Location acquired (± ${acc} m)`;
-          status.style.color = 'green';
-        },
-        err => {
-          let msg = 'Location error';
-          if (err.code === 1) msg = 'Permission denied – please allow location access';
-          if (err.code === 2) msg = 'Position unavailable';
-          if (err.code === 3) msg = 'Request timed out';
-          status.textContent = msg;
-          status.style.color = 'red';
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0
+function restartApp() {
+  location.reload();
+}
+</script>
+</body>
+</html><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nostr Key Generator - irgenius.org</title>
+    <!-- Your existing styles or any custom CSS can go here -->
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        #map { height: 400px; margin: 20px 0; border: 1px solid #ccc; }
+        button { padding: 10px 20px; margin: 10px 5px; cursor: pointer; }
+        #status { color: #555; margin: 10px 0; }
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            70% { transform: scale(1.4); opacity: 0.4; }
+            100% { transform: scale(1); opacity: 1; }
         }
-      );
-    });
-  </script>
+        .pulsing-dot { animation: pulse 2s infinite; }
+    </style>
+</head>
+<body>
+
+    <h1>Nostr Key Generator</h1>
+    <p>Generate a new nsec/npub keypair securely in your browser.</p>
+
+    <!-- Your original keygen UI elements - REPLACE/ADJUST with your actual code -->
+    <section id="keygen-section">
+        <button id="generate-btn">Generate New Keypair</button>
+        <div id="output" style="margin-top: 20px; word-break: break-all;">
+            <p><strong>npub:</strong> <span id="npub"></span></p>
+            <p><strong>nsec:</strong> <span id="nsec"></span></p>
+            <pre id="qr"></pre> <!-- or wherever you show QR -->
+        </div>
+        <p id="warning" style="color: red;">SAVE YOUR nsec SECURELY — it will be lost on refresh!</p>
+    </section>
+
+    <hr>
+
+    <h2>Nearby Discovery (Opt-in)</h2>
+    <p>Optionally share your approximate location on your personal relay to discover other users nearby.</p>
+    
+    <div id="map"></div>
+    <p id="status">Status: Not connected</p>
+
+    <button id="share-location">Enable Nearby Discovery (Share Location)</button>
+    <button id="find-nearby">Refresh Nearby Users</button>
+
+    <!-- All libraries and logic loaded at the bottom -->
+
+    <!-- Leaflet CSS + JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5n/N0aVIE=" crossorigin=""/>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <!-- nostr-tools -->
+    <script src="https://unpkg.com/nostr-tools@2.*/lib/nostr.bundle.min.js"></script>
+
+    <!-- Geohash library -->
+    <script src="https://unpkg.com/latlon-geohash@2.0.0/latlon-geohash.min.js"></script>
+
+    <!-- Main logic script -->
+    <script>
+        // ================== Config ==================
+        const RELAY_URL = 'wss://nostr-relay.irgenius.org';
+        let relay = null;
+        let map = null;
+        let userMarker = null;
+        let nearbyMarkers = [];
+        let currentGeohash = null;
+
+        // ================== Your keypair variables (ADJUST THESE) ==================
+        // These are placeholders — replace with how YOUR app generates/stores keys
+        let myPrivkeyHex = null;  // ← set this when generating (hex format)
+        let myPubkeyHex  = null;  // ← derived from privkey
+
+        // Example key generation (typical nostr-tools way) - REPLACE with your actual generator
+        document.getElementById('generate-btn')?.addEventListener('click', async () => {
+            const sk = nostrTools.generatePrivateKey();  // hex string
+            const pk = nostrTools.getPublicKey(sk);
+            const npub = nostrTools.npubEncode(pk);
+            const nsec = nostrTools.nsecEncode(sk);
+
+            document.getElementById('npub').textContent = npub;
+            document.getElementById('nsec').textContent = nsec;
+
+            myPrivkeyHex = sk;
+            myPubkeyHex  = pk;
+
+            // Optional: show QR codes, etc.
+            alert('Keypair generated! SAVE YOUR nsec NOW.');
+        });
+
+        // ================== Relay Connection ==================
+        async function getRelay() {
+            if (relay?.connected) return relay;
+            relay = nostrTools.relayInit(RELAY_URL);
+            relay.on('connect', () => {
+                document.getElementById('status').textContent = 'Relay connected ✓';
+                document.getElementById('status').style.color = 'green';
+            });
+            relay.on('error', err => {
+                document.getElementById('status').textContent = 'Relay error – check console';
+                document.getElementById('status').style.color = 'red';
+                console.error(err);
+            });
+            await relay.connect();
+            return relay;
+        }
+
+        // ================== Share Location ==================
+        async function shareMyLocation() {
+            if (!myPubkeyHex || !myPrivkeyHex) {
+                alert("Generate a keypair first!");
+                return;
+            }
+            if (!navigator.geolocation) {
+                alert("Geolocation not supported.");
+                return;
+            }
+
+            try {
+                const pos = await new Promise((res, rej) => 
+                    navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true })
+                );
+                const lat = pos.coords.latitude;
+                const lon = pos.coords.longitude;
+                currentGeohash = Geohash.encode(lat, lon, 6);  // ~1-5 km precision
+
+                if (!map) {
+                    map = L.map('map').setView([lat, lon], 15);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+                        maxZoom: 19
+                    }).addTo(map);
+                } else {
+                    map.setView([lat, lon], 15);
+                }
+
+                if (userMarker) userMarker.remove();
+                userMarker = L.circleMarker([lat, lon], {
+                    color: '#3388ff', fillColor: '#3388ff', fillOpacity: 0.7,
+                    radius: 12, weight: 3, className: 'pulsing-dot'
+                }).addTo(map).bindPopup('You are here');
+
+                const event = {
+                    kind: 0,
+                    created_at: Math.floor(Date.now() / 1000),
+                    tags: [['g', currentGeohash]],
+                    content: JSON.stringify({
+                        name: "irgenius User",
+                        about: "Nearby via keygen app"
+                    }),
+                    pubkey: myPubkeyHex
+                };
+                event.id = nostrTools.getEventHash(event);
+                event.sig = nostrTools.getSignature(event, myPrivkeyHex);
+
+                await (await getRelay()).publish(event);
+                document.getElementById('status').textContent = `Shared! Geohash: ${currentGeohash}`;
+                document.getElementById('status').style.color = 'blue';
+
+                // Auto-search nearby
+                findNearbyUsers(currentGeohash.substring(0, 5));
+
+            } catch (err) {
+                alert(`Error: ${err.message}`);
+            }
+        }
+
+        // ================== Find Nearby ==================
+        async function findNearbyUsers(prefix) {
+            if (!currentGeohash) {
+                alert("Share your location first!");
+                return;
+            }
+            const relay = await getRelay();
+
+            nearbyMarkers.forEach(m => m.remove());
+            nearbyMarkers = [];
+
+            const sub = relay.sub([{
+                kinds: [0],
+                '#g': [prefix],
+                limit: 20,
+                since: Math.floor(Date.now() / 1000) - 86400 * 14
+            }]);
+
+            sub.on('event', ev => {
+                let profile;
+                try { profile = JSON.parse(ev.content); } catch { return; }
+
+                const gTag = ev.tags.find(t => t[0] === 'g')?.[1] || prefix;
+                const { lat, lon } = Geohash.decode(gTag);
+
+                const marker = L.marker([lat, lon], {
+                    icon: L.divIcon({ className: 'nearby-dot', html: '🟢', iconSize: [24, 24] })
+                }).addTo(map)
+                  .bindPopup(`Nearby: ${profile.name || 'Anon'}<br>Pubkey: ${ev.pubkey.slice(0,12)}...`);
+
+                nearbyMarkers.push(marker);
+            });
+
+            sub.on('eose', () => {
+                document.getElementById('status').textContent += ' — Nearby check complete';
+            });
+        }
+
+        // Button listeners
+        document.getElementById('share-location')?.addEventListener('click', shareMyLocation);
+        document.getElementById('find-nearby')?.addEventListener('click', () => {
+            findNearbyUsers(currentGeohash?.substring(0, 5) || '9q');  // fallback broad prefix
+        });
+    </script>
 
 </body>
 </html>
