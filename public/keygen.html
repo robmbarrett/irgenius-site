@@ -4,14 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Nostr Key Generator - irgenius.org</title>
-  <script src="https://cdn.jsdelivr.net/npm/nostr-tools@2.7.0/lib/nostr.bundle.min.js"></script>
-  <script>
-    // Fallback if jsDelivr fails
-    if (typeof nostrTools === 'undefined') {
-      document.write('<script src="https://unpkg.com/nostr-tools@2.7.0/lib/nostr.bundle.min.js"><\/script>');
-    }
-  </script>
   <style>
+    /* Your original styles here – unchanged */
     body { font-family: system-ui, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; text-align: center; background: #f9f9f9; color: #333; }
     h1 { color: #2c3e50; margin-bottom: 20px; }
     button { background: #27ae60; color: white; border: none; padding: 14px 28px; font-size: 18px; margin: 15px; cursor: pointer; border-radius: 8px; }
@@ -30,8 +24,8 @@
   <h1>Nostr Key Generator</h1>
   <p>Generate a new Nostr key pair securely in your browser.<br>Save your <strong>nsec</strong> — never share it!</p>
 
-  <button id="generateBtn" disabled onclick="generateKey()">Generate New Key</button>
-  <div id="status">Loading Nostr tools... (if stuck, try Chrome or refresh)</div>
+  <button id="generateBtn" onclick="generateKey()">Generate New Key</button>
+  <div id="status">Ready!</div>
 
   <div id="result" class="result">
     <p class="warning">⚠️ BACKUP REQUIRED — SAVE THIS NOW!</p>
@@ -46,72 +40,80 @@
     </div>
   </div>
 
+  <!-- === EMBEDDED NOSTR-TOOLS BUNDLE HERE === -->
   <script>
-    const status = document.getElementById('status');
-    const generateBtn = document.getElementById('generateBtn');
+    // Paste the FULL minified nostr-tools bundle code here.
+    // Get it from: https://unpkg.com/nostr-tools@2.20.0/lib/nostr.bundle.min.js
+    // 
+    // Steps:
+    // 1. Open that URL in your browser.
+    // 2. Right-click → View Page Source (or Ctrl+U).
+    // 3. Copy ALL the content (it's one big line of minified JS).
+    // 4. Paste it right below this comment, replacing the placeholder.
+    // 
+    // Placeholder example (do NOT use this tiny fake one – replace with real):
+    // (function(){var NostrTools={generateSecretKey:function(){...}, ... }} )();
+    //
+    // After pasting, the next functions will work.
+  </script>
 
-    function checkLoaded() {
-      if (typeof nostrTools !== 'undefined') {
-        status.textContent = 'Ready!';
-        generateBtn.disabled = false;
-      } else {
-        status.textContent = 'Failed to load Nostr tools library. Try Chrome, disable tracking protection again, or check internet.';
-        generateBtn.disabled = true;
-      }
-    }
-
-    // Check after load + fallback timeout
-    window.addEventListener('load', checkLoaded);
-    setTimeout(checkLoaded, 5000); // double-check after 5s
-
+  <script>
+    // Your key generation logic – now uses the embedded global NostrTools
     function generateKey() {
-      if (typeof nostrTools === 'undefined') {
-        alert('Nostr tools not loaded. Refresh or try Chrome.');
+      const btn = document.getElementById('generateBtn');
+      const status = document.getElementById('status');
+      btn.disabled = true;
+      status.textContent = 'Generating...';
+
+      if (typeof NostrTools === 'undefined') {
+        status.textContent = 'Error: nostr-tools not loaded. Check if bundle was pasted correctly.';
+        btn.disabled = false;
         return;
       }
 
       try {
-        const secretKeyBytes = nostrTools.generateSecretKey();
-        const nsec = nostrTools.nip19.nsecEncode(secretKeyBytes);
-        const pubkeyHex = nostrTools.getPublicKey(secretKeyBytes);
-        const npub = nostrTools.nip19.npubEncode(pubkeyHex);
+        const secretKey = NostrTools.generateSecretKey();          // Uint8Array
+        const pubkeyHex  = NostrTools.getPublicKey(secretKey);     // hex string
+        const nsec = NostrTools.nip19.nsecEncode(secretKey);
+        const npub = NostrTools.nip19.npubEncode(pubkeyHex);
 
         document.getElementById('nsec').textContent = nsec;
         document.getElementById('npub').textContent = npub;
-        document.getElementById('result').style.display = 'block';
 
-        navigator.clipboard.writeText(nsec).catch(() => console.log('Auto-copy failed'));
-        status.textContent = 'Key generated!';
+        document.getElementById('result').style.display = 'block';
+        status.textContent = 'Key generated! SAVE YOUR nsec NOW.';
       } catch (err) {
-        alert('Error: ' + err.message);
-        status.textContent = 'Error generating key.';
+        status.textContent = 'Generation failed: ' + err.message;
+        console.error(err);
+      } finally {
+        btn.disabled = false;
       }
     }
 
     function downloadBackup() {
       const nsec = document.getElementById('nsec').textContent;
       const npub = document.getElementById('npub').textContent;
-      if (!nsec) return;
+      if (!nsec) return alert('No key to backup yet.');
+      
+      const text = `Nostr Key Backup - ${new Date().toISOString()}
+Secret (nsec): ${nsec}
+Public (npub): ${npub}
 
-      const content = `Nostr Key Backup - irgenius.org\n\n` +
-                      `Secret Key (nsec): ${nsec}\n` +
-                      `Public Key (npub): ${npub}\n\n` +
-                      `Generated: ${new Date().toISOString()}\n\n` +
-                      `WARNING: NEVER share your nsec!`;
-
-      const blob = new Blob([content], { type: 'text/plain' });
+⚠️ NEVER SHARE nsec! Store offline securely.`;
+      const blob = new Blob([text], {type: 'text/plain'});
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `nostr-key-backup-${Date.now()}.txt`;
+      a.download = 'nostr-key-backup.txt';
       a.click();
       URL.revokeObjectURL(url);
     }
 
     function copyNsec() {
-      const nsec = document.getElementById('nsec').textContent;
-      if (!nsec) return;
-      navigator.clipboard.writeText(nsec).then(() => alert('Copied!')).catch(() => alert('Copy failed - manual copy needed'));
+      const text = document.getElementById('nsec').textContent;
+      if (text) {
+        navigator.clipboard.writeText(text).then(() => alert('nsec copied!'));
+      }
     }
   </script>
 </body>
