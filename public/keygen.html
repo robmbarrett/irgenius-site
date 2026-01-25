@@ -6,16 +6,34 @@
   <title>Nostr Key Generator - irgenius.org</title>
 
   <!-- Leaflet -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5n/N0RDwH4=" crossorigin=""/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5n/N0RDwH4=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" 
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
   <!-- nostr-tools -->
   <script src="https://unpkg.com/nostr-tools@2.11.0/lib/nostr.bundle.js"></script>
 
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; text-align: center; background: #f9f9f9; color: #333; }
+    body { 
+      font-family: system-ui, sans-serif; 
+      max-width: 600px; 
+      margin: 40px auto; 
+      padding: 20px; 
+      text-align: center; 
+      background: #f9f9f9; 
+      color: #333; 
+    }
     h1, h2 { color: #2c3e50; margin-bottom: 20px; }
-    button { color: white; border: none; padding: 14px 28px; font-size: 18px; margin: 10px; cursor: pointer; border-radius: 8px; }
+    button { 
+      color: white; 
+      border: none; 
+      padding: 14px 28px; 
+      font-size: 18px; 
+      margin: 10px; 
+      cursor: pointer; 
+      border-radius: 8px; 
+    }
     button.primary   { background: #27ae60; }
     button.primary:hover   { background: #219653; }
     button.primary:disabled { background: #95a5a6; cursor: not-allowed; }
@@ -23,29 +41,62 @@
     button.secondary:hover { background: #2980b9; }
     button.danger    { background: #e74c3c; }
     button.danger:hover    { background: #c0392b; }
-    .result, #confirmation, #mapScreen { display: none; margin-top: 30px; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: left; }
-    .warning { color: #e74c3c; font-weight: bold; margin-bottom: 15px; font-size: 1.1em; }
-    pre { background: #ecf0f1; padding: 15px; border-radius: 6px; overflow-x: auto; font-family: monospace; white-space: pre-wrap; word-break: break-all; margin: 10px 0; }
+    .result, #confirmation, #mapScreen { 
+      display: none; 
+      margin-top: 30px; 
+      background: white; 
+      padding: 25px; 
+      border-radius: 8px; 
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+      text-align: left; 
+    }
+    .warning { 
+      color: #e74c3c; 
+      font-weight: bold; 
+      margin-bottom: 15px; 
+      font-size: 1.1em; 
+    }
+    pre { 
+      background: #ecf0f1; 
+      padding: 15px; 
+      border-radius: 6px; 
+      overflow-x: auto; 
+      font-family: monospace; 
+      white-space: pre-wrap; 
+      word-break: break-all; 
+      margin: 10px 0; 
+    }
     .actions { text-align: center; margin-top: 20px; }
     #status { color: #7f8c8d; font-size: 0.95em; margin-top: 10px; }
 
-    /* Map container – force dimensions even when off-screen */
-    #usMapContainer {
-      width: 100%;
-      height: 500px;
+    #usMapContainer { 
+      width: 100%; 
+      height: 500px; 
       min-height: 500px;
-      border: 1px solid #ccc;
-      border-radius: 8px;
+      border: 1px solid #ccc; 
+      border-radius: 8px; 
       overflow: hidden;
       background: #e0f7fa;
     }
 
-    /* Off-screen state for pre-creation */
+    /* Off-screen pre-init state */
     #usMapContainer.offscreen {
       position: absolute !important;
       left: -9999px !important;
+      top: -9999px !important;
       visibility: hidden !important;
       display: block !important;
+      width: 600px !important;   /* force a reasonable test size */
+      height: 500px !important;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: 1; }
+      70% { transform: scale(1.4); opacity: 0.4; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .pulsing-dot {
+      animation: pulse 2s infinite;
     }
   </style>
 </head>
@@ -155,15 +206,24 @@ document.getElementById('confirmYes').onclick = () => {
   const mapScreen = document.getElementById('mapScreen');
   const container = document.getElementById('usMapContainer');
 
-  // Move container on-screen
   container.classList.remove('offscreen');
   mapScreen.style.display = 'block';
 
   // Force reflow
-  mapScreen.offsetHeight;
+  void container.offsetHeight;
+  void mapScreen.offsetHeight;
 
   document.getElementById('status').textContent = 'Backup confirmed → showing location map.';
-  loadUSMapWithLocation();
+
+  // Give layout a moment then force redraws
+  setTimeout(() => {
+    if (mapInstance) {
+      mapInstance.invalidateSize(true);
+      setTimeout(() => mapInstance.invalidateSize(true), 150);
+      setTimeout(() => mapInstance.invalidateSize(true), 400);
+    }
+    loadUSMapWithLocation(); // ensure marker is added after sizing
+  }, 100);
 };
 
 document.getElementById('confirmNo').onclick = () => {
@@ -172,9 +232,9 @@ document.getElementById('confirmNo').onclick = () => {
   document.getElementById('status').textContent = 'Back to key. Please download and save the file.';
 };
 
-function loadUSMapWithLocation() {
+// Pre-create map off-screen on page load
+window.addEventListener('load', () => {
   const container = document.getElementById('usMapContainer');
-
   if (!mapInstance) {
     mapInstance = L.map('usMapContainer').setView([37.8, -96], 4);
 
@@ -182,27 +242,31 @@ function loadUSMapWithLocation() {
       attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
     }).addTo(mapInstance);
 
-    // Aggressive initial redraw attempts
-    setTimeout(() => mapInstance.invalidateSize(true), 100);
-    setTimeout(() => mapInstance.invalidateSize(true), 300);
-    setTimeout(() => mapInstance.invalidateSize(true), 600);
+    // Initial redraw attempts while off-screen
+    setTimeout(() => mapInstance.invalidateSize(true), 200);
+    setTimeout(() => mapInstance.invalidateSize(true), 500);
   }
+});
 
-  // ResizeObserver for any future size changes
+function loadUSMapWithLocation() {
+  if (!mapInstance) return; // safety
+
+  // ResizeObserver for dynamic size changes
   if ('ResizeObserver' in window) {
     const ro = new ResizeObserver(() => {
       if (mapInstance) mapInstance.invalidateSize();
     });
-    ro.observe(container);
+    ro.observe(document.getElementById('usMapContainer'));
   }
 
-  // Fallback polling (in case ResizeObserver not supported)
+  // Fallback polling
   const poll = setInterval(() => {
-    if (container.clientHeight > 100 && container.clientWidth > 100) {
-      if (mapInstance) mapInstance.invalidateSize(true);
+    const cont = document.getElementById('usMapContainer');
+    if (cont.clientHeight > 100 && cont.clientWidth > 100) {
+      mapInstance.invalidateSize(true);
       clearInterval(poll);
     }
-  }, 200);
+  }, 150);
 
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
@@ -214,7 +278,9 @@ function loadUSMapWithLocation() {
           fillColor: '#3388ff',
           fillOpacity: 0.7,
           className: 'pulsing-dot'
-        }).addTo(mapInstance).bindPopup('Your location (browser geolocation)');
+        })
+          .addTo(mapInstance)
+          .bindPopup('Your location (browser geolocation)');
 
         mapInstance.setView([latitude, longitude], 7);
 
@@ -240,7 +306,9 @@ function fallbackToIP(map) {
           fillColor: '#3388ff',
           fillOpacity: 0.7,
           className: 'pulsing-dot'
-        }).addTo(map).bindPopup(`Approx: ${data.city || 'Unknown'}, ${data.region || 'US'} (IP)`);
+        })
+          .addTo(map)
+          .bindPopup(`Approx: ${data.city || 'Unknown'}, ${data.region || 'US'} (IP)`);
 
         map.setView([data.latitude, data.longitude], 6);
         setTimeout(() => map.invalidateSize(true), 200);
