@@ -4,24 +4,92 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Nostr Key Generator - irgenius.org</title>
-  <script src="https://unpkg.com/nostr-tools@2.7.0/lib/nostr.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/nostr-tools@2.7.0/lib/nostr.bundle.min.js"></script>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; text-align: center; background: #f9f9f9; color: #333; }
-    h1 { color: #2c3e50; }
-    button { background: #27ae60; color: white; border: none; padding: 14px 28px; font-size: 18px; margin: 20px; cursor: pointer; border-radius: 8px; }
-    button:hover { background: #219653; }
-    .result { display: none; margin-top: 30px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-    .warning { color: #e74c3c; font-weight: bold; margin-bottom: 15px; }
-    pre { background: #ecf0f1; padding: 15px; border-radius: 6px; overflow-x: auto; font-family: monospace; white-space: pre-wrap; word-break: break-all; }
-    .actions button { margin: 10px; background: #3498db; }
-    .actions button:hover { background: #2980b9; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 20px;
+      line-height: 1.6;
+      background: #f9f9f9;
+      color: #333;
+      text-align: center;
+    }
+    h1 {
+      color: #2c3e50;
+      margin-bottom: 20px;
+    }
+    p {
+      margin-bottom: 20px;
+    }
+    button {
+      background: #27ae60;
+      color: white;
+      border: none;
+      padding: 14px 28px;
+      font-size: 18px;
+      margin: 15px;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background: #219653;
+    }
+    button:disabled {
+      background: #95a5a6;
+      cursor: not-allowed;
+    }
+    .result {
+      display: none;
+      margin-top: 30px;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      text-align: left;
+    }
+    .warning {
+      color: #e74c3c;
+      font-weight: bold;
+      margin-bottom: 15px;
+      font-size: 1.1em;
+    }
+    pre {
+      background: #ecf0f1;
+      padding: 15px;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-family: monospace;
+      white-space: pre-wrap;
+      word-break: break-all;
+      margin: 10px 0;
+    }
+    .actions {
+      text-align: center;
+      margin-top: 20px;
+    }
+    .actions button {
+      background: #3498db;
+      margin: 10px 5px;
+    }
+    .actions button:hover {
+      background: #2980b9;
+    }
+    #status {
+      color: #7f8c8d;
+      font-size: 0.95em;
+      margin-top: 10px;
+    }
   </style>
 </head>
 <body>
   <h1>Nostr Key Generator</h1>
-  <p>Generate a new Nostr key pair securely in your browser.<br>Save your nsec — never share it!</p>
+  <p>Generate a new Nostr key pair securely in your browser.<br>Save your <strong>nsec</strong> — never share it!</p>
 
-  <button onclick="generateKey()">Generate New Key</button>
+  <button id="generateBtn" onclick="generateKey()">Generate New Key</button>
+  <div id="status">Loading Nostr tools...</div>
 
   <div id="result" class="result">
     <p class="warning">⚠️ BACKUP REQUIRED — SAVE THIS NOW!</p>
@@ -37,22 +105,54 @@
   </div>
 
   <script>
+    const status = document.getElementById('status');
+    const generateBtn = document.getElementById('generateBtn');
+
+    // Check if library loaded
+    window.addEventListener('load', () => {
+      if (typeof nostrTools !== 'undefined') {
+        status.textContent = 'Ready!';
+        generateBtn.disabled = false;
+      } else {
+        status.textContent = 'Failed to load Nostr tools. Check internet or try another browser.';
+        generateBtn.disabled = true;
+      }
+    });
+
     function generateKey() {
-      const secretKeyBytes = nostrTools.generateSecretKey();
-      const nsec = nostrTools.nip19.nsecEncode(secretKeyBytes);
-      const pubkeyHex = nostrTools.getPublicKey(secretKeyBytes);
-      const npub = nostrTools.nip19.npubEncode(pubkeyHex);
+      if (typeof nostrTools === 'undefined') {
+        alert('Nostr tools library not loaded yet. Please wait or refresh the page.');
+        return;
+      }
 
-      document.getElementById('nsec').textContent = nsec;
-      document.getElementById('npub').textContent = npub;
-      document.getElementById('result').style.display = 'block';
+      try {
+        const secretKeyBytes = nostrTools.generateSecretKey();
+        const nsec = nostrTools.nip19.nsecEncode(secretKeyBytes);
+        const pubkeyHex = nostrTools.getPublicKey(secretKeyBytes);
+        const npub = nostrTools.nip19.npubEncode(pubkeyHex);
 
-      navigator.clipboard.writeText(nsec).catch(() => {});
+        document.getElementById('nsec').textContent = nsec;
+        document.getElementById('npub').textContent = npub;
+        document.getElementById('result').style.display = 'block';
+
+        // Auto-copy nsec
+        navigator.clipboard.writeText(nsec).catch(() => {
+          console.log('Auto-copy failed');
+        });
+
+        status.textContent = 'Key generated successfully!';
+      } catch (err) {
+        alert('Error generating key: ' + err.message);
+        console.error(err);
+        status.textContent = 'Error occurred. Please try again.';
+      }
     }
 
     function downloadBackup() {
       const nsec = document.getElementById('nsec').textContent;
       const npub = document.getElementById('npub').textContent;
+      if (!nsec) return;
+
       const content = `Nostr Key Backup - irgenius.org\n\n` +
                       `Secret Key (nsec): ${nsec}\n` +
                       `Public Key (npub): ${npub}\n\n` +
@@ -72,10 +172,12 @@
 
     function copyNsec() {
       const nsec = document.getElementById('nsec').textContent;
+      if (!nsec) return;
+
       navigator.clipboard.writeText(nsec).then(() => {
-        alert('nsec copied!');
+        alert('nsec copied to clipboard!');
       }).catch(() => {
-        alert('Copy failed — select and copy manually.');
+        alert('Copy failed — please long-press and copy the nsec text manually.');
       });
     }
   </script>
