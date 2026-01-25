@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5n/N0RDwH4=" crossorigin=""/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
-  <!-- nostr-tools from official CDN -->
+  <!-- nostr-tools -->
   <script src="https://unpkg.com/nostr-tools@2.11.0/lib/nostr.bundle.js"></script>
 
   <style>
@@ -30,12 +30,12 @@
     #status { color: #7f8c8d; font-size: 0.95em; margin-top: 10px; }
     #usMapContainer { 
       width: 100%; 
-      height: 500px;                /* increased for better default view */
+      height: 500px; 
       min-height: 500px;
       border: 1px solid #ccc; 
       border-radius: 8px; 
       overflow: hidden;
-      background: #e0f7fa;          /* light color → helps see if container renders */
+      background: #e0f7fa;          /* helps debug container visibility */
     }
   </style>
 </head>
@@ -56,7 +56,7 @@
 
   <div class="actions">
     <button onclick="downloadBackup()" class="primary">Download Backup (.txt)</button>
-    <button onclick="copyNsec()" class="secondary">Copy nsec to Clipboard</button>
+    <!-- Removed: Copy nsec to Clipboard button -->
   </div>
 </div>
 
@@ -72,13 +72,10 @@
 </div>
 
 <div id="mapScreen" class="result">
-  <h2>Your Approximate Location on US Map</h2>
+  <h2>Your Approximate Location</h2>
   <p>Blue dot = estimated location (browser geolocation preferred, falls back to IP)</p>
   <div id="usMapContainer"></div>
-
-  <div class="actions">
-    <button onclick="restartApp()" class="secondary">Generate Another Key</button>
-  </div>
+  <!-- Removed: Generate Another Key button -->
 </div>
 
 <script>
@@ -90,8 +87,8 @@ function generateKey() {
 
   console.log('NostrTools type:', typeof NostrTools);
   if (typeof NostrTools === 'undefined' || typeof NostrTools.generateSecretKey !== 'function') {
-    status.textContent = 'Error: nostr-tools library failed to load. Check console for details.';
-    console.error('NostrTools not available — possible CDN issue or network block');
+    status.textContent = 'Error: nostr-tools library failed to load. Check console.';
+    console.error('NostrTools not available');
     btn.disabled = false;
     return;
   }
@@ -144,11 +141,6 @@ Public Key (npub): ${npub}
   document.getElementById('status').textContent = 'Please confirm you saved the backup.';
 }
 
-function copyNsec() {
-  const text = document.getElementById('nsec').textContent;
-  if (text) navigator.clipboard.writeText(text).then(() => alert('nsec copied!'));
-}
-
 document.getElementById('confirmYes').onclick = () => {
   document.getElementById('confirmation').style.display = 'none';
   document.getElementById('mapScreen').style.display = 'block';
@@ -171,12 +163,12 @@ function loadUSMapWithLocation() {
     attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
   }).addTo(map);
 
-  // FIX: Force Leaflet to recalculate size after initialization
+  // Force correct sizing (fixes quartered tiles in most cases)
   setTimeout(() => {
     map.invalidateSize(true);
-  }, 150);
+  }, 200);
 
-  // Also listen for window resize
+  // Handle window resize
   window.addEventListener('resize', () => {
     map.invalidateSize();
   });
@@ -190,15 +182,13 @@ function loadUSMapWithLocation() {
           color: '#3388ff',
           fillColor: '#3388ff',
           fillOpacity: 0.7,
-          className: 'pulsing-dot'  // optional pulsing effect
+          className: 'pulsing-dot'
         })
           .addTo(map)
           .bindPopup('Your location (browser geolocation)');
 
         map.setView([latitude, longitude], 7);
-
-        // Re-validate size after view change and marker placement
-        setTimeout(() => map.invalidateSize(), 100);
+        setTimeout(() => map.invalidateSize(), 150);
       },
       () => fallbackToIP(map),
       { timeout: 10000 }
@@ -224,8 +214,7 @@ function fallbackToIP(map) {
           .bindPopup(`Approx: ${data.city || 'Unknown'}, ${data.region || 'US'} (IP)`);
 
         map.setView([data.latitude, data.longitude], 6);
-
-        setTimeout(() => map.invalidateSize(), 100);
+        setTimeout(() => map.invalidateSize(), 150);
       } else {
         showNoLocation(map);
       }
@@ -235,12 +224,8 @@ function fallbackToIP(map) {
 
 function showNoLocation(map) {
   map.setView([39.8283, -98.5795], 4);
-  setTimeout(() => map.invalidateSize(), 100);
+  setTimeout(() => map.invalidateSize(), 150);
   alert('Could not determine your location.');
-}
-
-function restartApp() {
-  location.reload();
 }
 </script>
 </body>
