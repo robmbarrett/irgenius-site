@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Nostr Key Generator - irgenius.org</title>
 
-  <!-- Leaflet for the map -->
+  <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5n/N0RDwH4=" crossorigin=""/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
-  <!-- Load nostr-tools from CDN (this is the placeholder / real bundle) -->
-  <script src="https://unpkg.com/nostr-tools@2/lib/nostr.bundle.js"></script>
+  <!-- nostr-tools from official CDN -->
+  <script src="https://unpkg.com/nostr-tools@2.11.0/lib/nostr.bundle.js"></script>
 
   <style>
     body { font-family: system-ui, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; text-align: center; background: #f9f9f9; color: #333; }
@@ -80,10 +80,11 @@ function generateKey() {
   btn.disabled = true;
   status.textContent = 'Generating secure key...';
 
-  // Check if nostr-tools loaded from CDN
+  // Debug: Check if library loaded
+  console.log('NostrTools type:', typeof NostrTools);
   if (typeof NostrTools === 'undefined' || typeof NostrTools.generateSecretKey !== 'function') {
-    status.textContent = 'Error: nostr-tools library failed to load. Check your internet or try again.';
-    console.error('NostrTools not available');
+    status.textContent = 'Error: nostr-tools library failed to load. Check console for details.';
+    console.error('NostrTools not available — possible CDN issue or network block');
     btn.disabled = false;
     return;
   }
@@ -104,11 +105,14 @@ function generateKey() {
     status.textContent = 'Key generated! Please create a backup.';
   } catch (err) {
     status.textContent = 'Error: ' + err.message;
-    console.error(err);
+    console.error('Key generation failed:', err);
   } finally {
     btn.disabled = false;
   }
 }
+
+// ... your other functions unchanged: downloadBackup, copyNsec, confirmYes/No handlers, map functions, restartApp ...
+// (paste the rest of your functions here from your original file)
 
 function downloadBackup() {
   const nsec = document.getElementById('nsec').textContent;
