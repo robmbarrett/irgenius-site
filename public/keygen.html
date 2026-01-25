@@ -79,17 +79,6 @@
       background: #e0f7fa;
     }
 
-    /* Off-screen pre-init state */
-    #usMapContainer.offscreen {
-      position: absolute !important;
-      left: -9999px !important;
-      top: -9999px !important;
-      visibility: hidden !important;
-      display: block !important;
-      width: 600px !important;   /* force a reasonable test size */
-      height: 500px !important;
-    }
-
     @keyframes pulse {
       0% { transform: scale(1); opacity: 1; }
       70% { transform: scale(1.4); opacity: 0.4; }
@@ -134,7 +123,7 @@
 <div id="mapScreen" class="result">
   <h2>Your Approximate Location</h2>
   <p>Blue dot = estimated location (browser geolocation preferred, falls back to IP)</p>
-  <div id="usMapContainer" class="offscreen"></div>
+  <div id="usMapContainer"></div>
 </div>
 
 <script>
@@ -206,24 +195,33 @@ document.getElementById('confirmYes').onclick = () => {
   const mapScreen = document.getElementById('mapScreen');
   const container = document.getElementById('usMapContainer');
 
-  container.classList.remove('offscreen');
   mapScreen.style.display = 'block';
 
-  // Force reflow
+  // Force layout reflow
   void container.offsetHeight;
-  void mapScreen.offsetHeight;
 
   document.getElementById('status').textContent = 'Backup confirmed → showing location map.';
 
-  // Give layout a moment then force redraws
+  // Initialize map now that container is visible
+  if (!mapInstance) {
+    mapInstance = L.map('usMapContainer').setView([37.8, -96], 4);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(mapInstance);
+  }
+
+  // Give browser time to render, then force correct size + load location
   setTimeout(() => {
     if (mapInstance) {
-      mapInstance.invalidateSize(true);
-      setTimeout(() => mapInstance.invalidateSize(true), 150);
-      setTimeout(() => mapInstance.invalidateSize(true), 400);
+      mapInstance.invalidateSize({ animate: false });
+      loadUSMapWithLocation();
     }
-    loadUSMapWithLocation(); // ensure marker is added after sizing
-  }, 100);
+  }, 150);
+
+  // Extra safety invalidations in case of slow layout
+  setTimeout(() => mapInstance?.invalidateSize(true), 400);
+  setTimeout(() => mapInstance?.invalidateSize(true), 800);
 };
 
 document.getElementById('confirmNo').onclick = () => {
@@ -232,97 +230,75 @@ document.getElementById('confirmNo').onclick = () => {
   document.getElementById('status').textContent = 'Back to key. Please download and save the file.';
 };
 
-// Pre-create map off-screen on page load
-window.addEventListener('load', () => {
-  const container = document.getElementById('usMapContainer');
-  if (!mapInstance) {
-    mapInstance = L.map('usMapContainer').setView([37.8, -96], 4);
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-    }).addTo(mapInstance);
-
-    // Initial redraw attempts while off-screen
-    setTimeout(() => mapInstance.invalidateSize(true), 200);
-    setTimeout(() => mapInstance.invalidateSize(true), 500);
-  }
-});
-
 function loadUSMapWithLocation() {
-  if (!mapInstance) return; // safety
+  if (!mapInstance) return;
 
-  // ResizeObserver for dynamic size changes
+  const addMarkerAndCenter = (lat, lng, popupText, zoom = 7) => {
+    L.circleMarker([lat, lng], {
+      radius: 12,
+      color: '#3388ff',
+      fillColor: '#3388ff',
+      fillOpacity: 0.7,
+      className: 'pulsing-dot'
+    })
+      .addTo(mapInstance)
+      .bindPopup(popupText);
+
+    mapInstance.setView([lat, lng], zoom);
+
+    // Very important: re-validate size *after* view change
+    setTimeout(() => mapInstance.invalidateSize(true), 100);
+  };
+
+  // Watch for container resize (good practice)
   if ('ResizeObserver' in window) {
     const ro = new ResizeObserver(() => {
-      if (mapInstance) mapInstance.invalidateSize();
+      mapInstance?.invalidateSize();
     });
     ro.observe(document.getElementById('usMapContainer'));
   }
 
-  // Fallback polling
-  const poll = setInterval(() => {
-    const cont = document.getElementById('usMapContainer');
-    if (cont.clientHeight > 100 && cont.clientWidth > 100) {
-      mapInstance.invalidateSize(true);
-      clearInterval(poll);
-    }
-  }, 150);
-
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
       pos => {
-        const { latitude, longitude } = pos.coords;
-        L.circleMarker([latitude, longitude], {
-          radius: 12,
-          color: '#3388ff',
-          fillColor: '#3388ff',
-          fillOpacity: 0.7,
-          className: 'pulsing-dot'
-        })
-          .addTo(mapInstance)
-          .bindPopup('Your location (browser geolocation)');
-
-        mapInstance.setView([latitude, longitude], 7);
-
-        setTimeout(() => mapInstance.invalidateSize(true), 200);
-        clearInterval(poll);
+        addMarkerAndCenter(
+          pos.coords.latitude,
+          pos.coords.longitude,
+          'Your location (browser geolocation)',
+          7
+        );
       },
-      () => fallbackToIP(mapInstance),
+      () => fallbackToIP(),
       { timeout: 10000 }
     );
   } else {
-    fallbackToIP(mapInstance);
+    fallbackToIP();
   }
-}
 
-function fallbackToIP(map) {
-  fetch('https://ipapi.co/json/')
-    .then(res => res.json())
-    .then(data => {
-      if (data.latitude && data.longitude) {
-        L.circleMarker([data.latitude, data.longitude], {
-          radius: 12,
-          color: '#3388ff',
-          fillColor: '#3388ff',
-          fillOpacity: 0.7,
-          className: 'pulsing-dot'
-        })
-          .addTo(map)
-          .bindPopup(`Approx: ${data.city || 'Unknown'}, ${data.region || 'US'} (IP)`);
+  function fallbackToIP() {
+    fetch('https://ipapi.co/json/')
+      .then(res => res.json())
+      .then(data => {
+        if (data.latitude && data.longitude) {
+          const zoom = (data.country_name === 'United States') ? 6 : 4;
+          addMarkerAndCenter(
+            data.latitude,
+            data.longitude,
+            `Approx: ${data.city || 'Unknown'}, ${data.region || data.country_name} (IP based)`,
+            zoom
+          );
+        } else {
+          showNoLocation();
+        }
+      })
+      .catch(() => showNoLocation());
+  }
 
-        map.setView([data.latitude, data.longitude], 6);
-        setTimeout(() => map.invalidateSize(true), 200);
-      } else {
-        showNoLocation(map);
-      }
-    })
-    .catch(() => showNoLocation(map));
-}
-
-function showNoLocation(map) {
-  map.setView([39.8283, -98.5795], 4);
-  setTimeout(() => map.invalidateSize(true), 200);
-  alert('Could not determine your location.');
+  function showNoLocation() {
+    mapInstance.setView([39.8283, -98.5795], 4);
+    setTimeout(() => mapInstance.invalidateSize(true), 200);
+    alert('Could not determine your location.');
+  }
 }
 </script>
 </body>
