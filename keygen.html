@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Nostr Key Generator - irgenius.org</title>
+  <script src="https://unpkg.com/nostr-tools@2.7.0/lib/nostr.bundle.min.js"></script>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 20px;
+      line-height: 1.6;
+      background: #f9f9f9;
+      color: #333;
+    }
+    h1 { text-align: center; color: #2c3e50; }
+    button {
+      background: #27ae60;
+      color: white;
+      border: none;
+      padding: 14px 28px;
+      font-size: 18px;
+      margin: 20px auto;
+      display: block;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: background 0.2s;
+    }
+    button:hover { background: #219653; }
+    .result {
+      display: none;
+      margin-top: 30px;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .warning {
+      color: #e74c3c;
+      font-weight: bold;
+      margin-bottom: 15px;
+    }
+    pre {
+      background: #ecf0f1;
+      padding: 15px;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-family: monospace;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .actions button {
+      margin: 10px;
+      background: #3498db;
+    }
+    .actions button:hover { background: #2980b9; }
+  </style>
+</head>
+<body>
+  <h1>Nostr Key Generator</h1>
+  <p style="text-align:center;">
+    Generate a new Nostr key pair securely in your browser.<br>
+    Save your <strong>nsec</strong> — never share it!
+  </p>
+
+  <button onclick="generateKey()">Generate New Key</button>
+
+  <div id="result" class="result">
+    <p class="warning">⚠️ BACKUP REQUIRED — SAVE THIS NOW!</p>
+    <p><strong>Secret Key (nsec):</strong></p>
+    <pre id="nsec"></pre>
+    <p><strong>Public Key (npub):</strong></p>
+    <pre id="npub"></pre>
+
+    <div class="actions">
+      <button onclick="downloadBackup()">Download Backup (.txt)</button>
+      <button onclick="copyNsec()">Copy nsec to Clipboard</button>
+    </div>
+  </div>
+
+  <script>
+    function generateKey() {
+      const secretKeyBytes = nostrTools.generateSecretKey(); // Uint8Array
+      const nsec = nostrTools.nip19.nsecEncode(secretKeyBytes);
+      const pubkeyHex = nostrTools.getPublicKey(secretKeyBytes);
+      const npub = nostrTools.nip19.npubEncode(pubkeyHex);
+
+      document.getElementById('nsec').textContent = nsec;
+      document.getElementById('npub').textContent = npub;
+      document.getElementById('result').style.display = 'block';
+
+      // Auto-copy nsec to clipboard
+      navigator.clipboard.writeText(nsec).catch(() => {});
+    }
+
+    function downloadBackup() {
+      const nsec = document.getElementById('nsec').textContent;
+      const npub = document.getElementById('npub').textContent;
+      const content = `Nostr Key Backup - irgenius.org\n\n` +
+                      `Secret Key (nsec): ${nsec}\n` +
+                      `Public Key (npub): ${npub}\n\n` +
+                      `Generated: ${new Date().toISOString()}\n\n` +
+                      `WARNING: NEVER share your nsec! Store offline securely.`;
+
+      const blob = new Blob([content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `nostr-key-backup-${Date.now()}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function copyNsec() {
+      const nsec = document.getElementById('nsec').textContent;
+      navigator.clipboard.writeText(nsec).then(() => {
+        alert('nsec copied to clipboard!');
+      }).catch(() => {
+        alert('Copy failed — please select and copy the nsec text manually.');
+      });
+    }
+  </script>
+</body>
+</html>
