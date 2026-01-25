@@ -79,6 +79,11 @@
       background: #e0f7fa;
     }
 
+    /* Temp class to force reflow */
+    #usMapContainer.force-reflow {
+      transform: translateZ(0); /* hardware accelerate + reflow trigger */
+    }
+
     @keyframes pulse {
       0% { transform: scale(1); opacity: 1; }
       70% { transform: scale(1.4); opacity: 0.4; }
@@ -197,31 +202,38 @@ document.getElementById('confirmYes').onclick = () => {
 
   mapScreen.style.display = 'block';
 
-  // Force layout reflow
+  // Force initial reflow
   void container.offsetHeight;
 
-  document.getElementById('status').textContent = 'Backup confirmed → showing location map.';
+  document.getElementById('status').textContent = 'Backup confirmed → loading map...';
 
-  // Initialize map now that container is visible
-  if (!mapInstance) {
-    mapInstance = L.map('usMapContainer').setView([37.8, -96], 4);
+  // Chain: wait for paint → init map → force sizes multiple times
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      if (!mapInstance) {
+        mapInstance = L.map('usMapContainer', {
+          zoomControl: true
+        }).setView([37.8, -96], 4);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-    }).addTo(mapInstance);
-  }
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+          maxZoom: 19
+        }).addTo(mapInstance);
+      }
 
-  // Give browser time to render, then force correct size + load location
-  setTimeout(() => {
-    if (mapInstance) {
-      mapInstance.invalidateSize({ animate: false });
+      // Staggered invalidations – this fixes quadrants in most cases
+      setTimeout(() => mapInstance.invalidateSize({ animate: false }), 50);
+      setTimeout(() => mapInstance.invalidateSize(true), 150);
+      setTimeout(() => {
+        mapInstance.invalidateSize({ debounceMoveend: false });
+        // Extra reflow trigger
+        container.classList.add('force-reflow');
+        setTimeout(() => container.classList.remove('force-reflow'), 100);
+      }, 300);
+
       loadUSMapWithLocation();
-    }
-  }, 150);
-
-  // Extra safety invalidations in case of slow layout
-  setTimeout(() => mapInstance?.invalidateSize(true), 400);
-  setTimeout(() => mapInstance?.invalidateSize(true), 800);
+    }, 80);  // Small delay after first frame
+  });
 };
 
 document.getElementById('confirmNo').onclick = () => {
@@ -246,28 +258,18 @@ function loadUSMapWithLocation() {
 
     mapInstance.setView([lat, lng], zoom);
 
-    // Very important: re-validate size *after* view change
-    setTimeout(() => mapInstance.invalidateSize(true), 100);
+    // Invalidate again after setView – crucial for marker visibility too
+    setTimeout(() => mapInstance.invalidateSize(true), 120);
   };
 
-  // Watch for container resize (good practice)
+  // Resize observer for future changes
   if ('ResizeObserver' in window) {
-    const ro = new ResizeObserver(() => {
-      mapInstance?.invalidateSize();
-    });
-    ro.observe(document.getElementById('usMapContainer'));
+    new ResizeObserver(() => mapInstance?.invalidateSize()).observe(document.getElementById('usMapContainer'));
   }
 
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
-      pos => {
-        addMarkerAndCenter(
-          pos.coords.latitude,
-          pos.coords.longitude,
-          'Your location (browser geolocation)',
-          7
-        );
-      },
+      pos => addMarkerAndCenter(pos.coords.latitude, pos.coords.longitude, 'Your location (browser geolocation)', 7),
       () => fallbackToIP(),
       { timeout: 10000 }
     );
@@ -284,14 +286,14 @@ function loadUSMapWithLocation() {
           addMarkerAndCenter(
             data.latitude,
             data.longitude,
-            `Approx: ${data.city || 'Unknown'}, ${data.region || data.country_name} (IP based)`,
+            `Approx: ${data.city || 'Unknown'}, ${data.region || data.country_name} (IP)`,
             zoom
           );
         } else {
           showNoLocation();
         }
       })
-      .catch(() => showNoLocation());
+      .catch(showNoLocation);
   }
 
   function showNoLocation() {
