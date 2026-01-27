@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Nostr Key Generator - irgenius.org</title>
 
-  <!-- OpenLayers -->
-  <link rel="stylesheet" href="https://unpkg.com/ol@v10.7.0/ol.css">
-  <script src="https://unpkg.com/ol@v10.7.0/dist/ol.js"></script>
+  <!-- MapLibre GL JS -->
+  <script src="https://unpkg.com/maplibre-gl@^5.17.0/dist/maplibre-gl.js"></script>
+  <link href="https://unpkg.com/maplibre-gl@^5.17.0/dist/maplibre-gl.css" rel="stylesheet">
 
   <!-- nostr-tools -->
   <script src="https://unpkg.com/nostr-tools@2.11.0/lib/nostr.bundle.js"></script>
@@ -77,18 +77,10 @@
       background: #e0f7fa;
     }
 
-    /* Temp class to force reflow */
-    #usMapContainer.force-reflow {
-      transform: translateZ(0); /* hardware accelerate + reflow trigger */
-    }
-
     @keyframes pulse {
       0% { transform: scale(1); opacity: 1; }
       70% { transform: scale(1.4); opacity: 0.4; }
       100% { transform: scale(1); opacity: 1; }
-    }
-    .pulsing-dot .ol-circle { 
-      animation: pulse 2s infinite; 
     }
   </style>
 </head>
@@ -115,4 +107,256 @@
 <div id="confirmation" class="result">
   <h2>Backup Confirmation</h2>
   <p class="warning">Did you successfully download and save the <code>nostr-key-backup.txt</code> file?</p>
-  <p
+  <p><strong>Important:</strong> Without this backup you will permanently lose access to your account if you lose this device or clear browser data.</p>
+
+  <div class="actions">
+    <button id="confirmYes" class="primary">Yes, I saved it securely</button>
+    <button id="confirmNo" class="danger">No, let me download again</button>
+  </div>
+</div>
+
+<div id="mapScreen" class="result">
+  <h2>Your Approximate Location</h2>
+  <p>Blue dot = estimated location (browser geolocation preferred, falls back to IP)</p>
+  <div id="usMapContainer"></div>
+</div>
+
+<script>
+let mapInstance = null;
+
+function generateKey() {
+  const btn = document.getElementById('generateBtn');
+  const status = document.getElementById('status');
+  btn.disabled = true;
+  status.textContent = 'Generating secure key...';
+
+  if (typeof NostrTools === 'undefined' || typeof NostrTools.generateSecretKey !== 'function') {
+    status.textContent = 'Error: nostr-tools library failed to load.';
+    console.error('NostrTools not available');
+    btn.disabled = false;
+    return;
+  }
+
+  try {
+    const secretKey = NostrTools.generateSecretKey();
+    const pubkey   = NostrTools.getPublicKey(secretKey);
+    const nsec     = NostrTools.nip19.nsecEncode(secretKey);
+    const npub     = NostrTools.nip19.npubEncode(pubkey);
+
+    document.getElementById('nsec').textContent = nsec;
+    document.getElementById('npub').textContent = npub;
+
+    document.getElementById('result').style.display       = 'block';
+    document.getElementById('confirmation').style.display = 'none';
+    document.getElementById('mapScreen').style.display    = 'none';
+
+    status.textContent = 'Key generated! Please create a backup.';
+  } catch (err) {
+    status.textContent = 'Error: ' + err.message;
+    console.error('Key generation failed:', err);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function downloadBackup() {
+  const nsec = document.getElementById('nsec').textContent;
+  const npub = document.getElementById('npub').textContent;
+  if (!nsec) return alert('No key generated yet.');
+
+  const text = `Nostr Key Backup - ${new Date().toISOString()}
+Secret Key (nsec): ${nsec}
+Public Key (npub): ${npub}
+
+⚠️ NEVER share your nsec! Store offline securely.`;
+
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'nostr-key-backup.txt';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  document.getElementById('result').style.display = 'none';
+  document.getElementById('confirmation').style.display = 'block';
+  document.getElementById('status').textContent = 'Please confirm you saved the backup.';
+}
+
+document.getElementById('confirmYes').onclick = () => {
+  document.getElementById('confirmation').style.display = 'none';
+  const mapScreen = document.getElementById('mapScreen');
+  const container = document.getElementById('usMapContainer');
+
+  mapScreen.style.display = 'block';
+
+  // Force layout/reflow
+  void container.offsetHeight;
+
+  document.getElementById('status').textContent = 'Backup confirmed → loading map...';
+
+  // Delay for mobile layout/paint
+  setTimeout(() => {
+    console.log('Container size before map init:', container.clientWidth, container.clientHeight);
+
+    if (!mapInstance) {
+      mapInstance = new maplibregl.Map({
+        container: 'usMapContainer',
+        style: {
+          version: 8,
+          sources: {
+            osm: {
+              type: 'raster',
+              tiles: ['https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'],
+              tileSize: 256,
+              attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }
+          },
+          layers: [
+            {
+              id: 'osm-layer',
+              type: 'raster',
+              source: 'osm',
+              minzoom: 0,
+              maxzoom: 19
+            }
+          ]
+        },
+        center: [-96, 37.8],
+        zoom: 4
+      });
+
+      // Nudge for mobile canvas
+      container.style.visibility = 'hidden';
+      void container.offsetHeight;
+      container.style.visibility = 'visible';
+
+      // Resize calls
+      setTimeout(() => { mapInstance.resize(); console.log('After resize 1:', container.clientWidth, container.clientHeight); }, 100);
+      setTimeout(() => mapInstance.resize(), 250);
+    }
+
+    loadUSMapWithLocation();
+  }, 300);
+};
+
+document.getElementById('confirmNo').onclick = () => {
+  document.getElementById('confirmation').style.display = 'none';
+  document.getElementById('result').style.display = 'block';
+  document.getElementById('status').textContent = 'Back to key. Please download and save the file.';
+};
+
+function loadUSMapWithLocation() {
+  if (!mapInstance) return;
+
+  const addLocation = (lng, lat, popupText, zoom = 7, accuracy = 0) => {
+    const lngLat = [lng, lat];
+
+    // Blue dot (circle)
+    mapInstance.addSource('user-point', {
+      type: 'geojson',
+      data: {
+        type: 'Feature',
+        geometry: {
+          type: 'Point',
+          coordinates: lngLat
+        }
+      }
+    });
+
+    mapInstance.addLayer({
+      id: 'user-dot',
+      type: 'circle',
+      source: 'user-point',
+      paint: {
+        'circle-radius': 12,
+        'circle-color': '#3388ff',
+        'circle-stroke-color': '#ffffff',
+        'circle-stroke-width': 3,
+        'circle-opacity': 0.9
+      }
+    });
+
+    // Accuracy circle
+    if (accuracy > 0) {
+      mapInstance.addSource('accuracy', {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          geometry: {
+            type: 'Point',
+            coordinates: lngLat
+          }
+        }
+      });
+
+      mapInstance.addLayer({
+        id: 'accuracy-ring',
+        type: 'circle',
+        source: 'accuracy',
+        paint: {
+          'circle-radius': accuracy,
+          'circle-color': '#3388ff',
+          'circle-opacity': 0.2,
+          'circle-stroke-color': '#3388ff',
+          'circle-stroke-width': 2
+        }
+      });
+    }
+
+    // Popup
+    if (popupText) {
+      new maplibregl.Popup({ offset: 25, closeButton: false })
+        .setLngLat(lngLat)
+        .setHTML(`<div style="padding:6px 10px; background:white; border-radius:4px; box-shadow:0 2px 6px rgba(0,0,0,0.3);">${popupText}</div>`)
+        .addTo(mapInstance);
+    }
+
+    mapInstance.setCenter(lngLat);
+    mapInstance.setZoom(zoom);
+
+    // Final resize
+    setTimeout(() => mapInstance.resize(), 150);
+  };
+
+  // Watch for size changes
+  if ('ResizeObserver' in window) {
+    new ResizeObserver(() => mapInstance?.resize()).observe(document.getElementById('usMapContainer'));
+  }
+
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos => addLocation(pos.coords.longitude, pos.coords.latitude, 'Your location (browser geolocation)', 7, pos.coords.accuracy),
+      () => fallbackToIP(),
+      { timeout: 15000, enableHighAccuracy: true }
+    );
+  } else {
+    fallbackToIP();
+  }
+
+  function fallbackToIP() {
+    fetch('https://ipapi.co/json/')
+      .then(res => res.json())
+      .then(data => {
+        if (data.latitude && data.longitude) {
+          const zoom = (data.country_name === 'United States') ? 6 : 4;
+          addLocation(data.longitude, data.latitude, `Approx: ${data.city || 'Unknown'}, ${data.region || data.country_name} (IP)`, zoom);
+        } else {
+          showNoLocation();
+        }
+      })
+      .catch(showNoLocation);
+  }
+
+  function showNoLocation() {
+    mapInstance.setCenter([-98.5795, 39.8283]);
+    mapInstance.setZoom(4);
+    setTimeout(() => mapInstance.resize(), 200);
+    alert('Could not determine your location.');
+  }
+}
+</script>
+</body>
+</html>
