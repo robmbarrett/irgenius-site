@@ -5,11 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Nostr Key Generator - irgenius.org</title>
 
-  <!-- Leaflet -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5n/N0RDwH4=" crossorigin=""/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" 
-          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <!-- OpenLayers -->
+  <link rel="stylesheet" href="https://unpkg.com/ol@v10.7.0/ol.css">
+  <script src="https://unpkg.com/ol@v10.7.0/dist/ol.js"></script>
 
   <!-- nostr-tools -->
   <script src="https://unpkg.com/nostr-tools@2.11.0/lib/nostr.bundle.js"></script>
@@ -89,8 +87,8 @@
       70% { transform: scale(1.4); opacity: 0.4; }
       100% { transform: scale(1); opacity: 1; }
     }
-    .pulsing-dot {
-      animation: pulse 2s infinite;
+    .pulsing-dot .ol-circle { 
+      animation: pulse 2s infinite; 
     }
   </style>
 </head>
@@ -133,6 +131,7 @@
 
 <script>
 let mapInstance = null;
+let locationLayer = null;
 
 function generateKey() {
   const btn = document.getElementById('generateBtn');
@@ -211,28 +210,39 @@ document.getElementById('confirmYes').onclick = () => {
   requestAnimationFrame(() => {
     setTimeout(() => {
       if (!mapInstance) {
-        mapInstance = L.map('usMapContainer', {
-          zoomControl: true
-        }).setView([37.8, -96], 4);
+        mapInstance = new ol.Map({
+          target: 'usMapContainer',
+          layers: [
+            new ol.layer.Tile({
+              source: new ol.source.OSM({
+                attributions: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              })
+            })
+          ],
+          view: new ol.View({
+            center: ol.proj.fromLonLat([-96, 37.8]),
+            zoom: 4
+          }),
+          controls: ol.control.defaults().extend([new ol.control.Zoom()])
+        });
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-          maxZoom: 19
-        }).addTo(mapInstance);
+        // Remove previous location layer if any
+        if (locationLayer) {
+          mapInstance.removeLayer(locationLayer);
+        }
       }
 
-      // Staggered invalidations – this fixes quadrants in most cases
-      setTimeout(() => mapInstance.invalidateSize({ animate: false }), 50);
-      setTimeout(() => mapInstance.invalidateSize(true), 150);
+      // Staggered size updates – critical for display:none → block transition
+      setTimeout(() => mapInstance.updateSize(), 50);
+      setTimeout(() => mapInstance.updateSize(), 150);
       setTimeout(() => {
-        mapInstance.invalidateSize({ debounceMoveend: false });
-        // Extra reflow trigger
+        mapInstance.updateSize();
         container.classList.add('force-reflow');
         setTimeout(() => container.classList.remove('force-reflow'), 100);
       }, 300);
 
       loadUSMapWithLocation();
-    }, 80);  // Small delay after first frame
+    }, 80);
   });
 };
 
@@ -245,33 +255,88 @@ document.getElementById('confirmNo').onclick = () => {
 function loadUSMapWithLocation() {
   if (!mapInstance) return;
 
-  const addMarkerAndCenter = (lat, lng, popupText, zoom = 7) => {
-    L.circleMarker([lat, lng], {
-      radius: 12,
-      color: '#3388ff',
-      fillColor: '#3388ff',
-      fillOpacity: 0.7,
-      className: 'pulsing-dot'
-    })
-      .addTo(mapInstance)
-      .bindPopup(popupText);
+  const addLocation = (lon, lat, popupText, zoom = 7, accuracy = 0) => {
+    const coord = ol.proj.fromLonLat([lon, lat]);
 
-    mapInstance.setView([lat, lng], zoom);
+    // Vector source/layer for blue dot + accuracy
+    const features = [];
 
-    // Invalidate again after setView – crucial for marker visibility too
-    setTimeout(() => mapInstance.invalidateSize(true), 120);
+    // Blue pulsing dot
+    const pointFeature = new ol.Feature({
+      geometry: new ol.geom.Point(coord)
+    });
+    features.push(pointFeature);
+
+    // Accuracy circle if available
+    let accuracyFeature = null;
+    if (accuracy > 0) {
+      accuracyFeature = new ol.Feature({
+        geometry: new ol.geom.Circle(coord, accuracy)
+      });
+      features.push(accuracyFeature);
+    }
+
+    locationLayer = new ol.layer.Vector({
+      source: new ol.source.Vector({ features: features }),
+      style: (feature) => {
+        if (feature.getGeometry().getType() === 'Point') {
+          return new ol.style.Style({
+            image: new ol.style.Circle({
+              radius: 12,
+              fill: new ol.style.Fill({ color: '#3388ff' }),
+              stroke: new ol.style.Stroke({ color: '#ffffff', width: 3 })
+            })
+          });
+        } else if (feature.getGeometry().getType() === 'Circle') {
+          return new ol.style.Style({
+            stroke: new ol.style.Stroke({ color: '#3388ff', width: 2 }),
+            fill: new ol.style.Fill({ color: 'rgba(51, 136, 255, 0.2)' })
+          });
+        }
+      }
+    });
+    locationLayer.set('name', 'locationLayer');
+    mapInstance.addLayer(locationLayer);
+
+    // Popup overlay
+    if (popupText) {
+      const popupElement = document.createElement('div');
+      popupElement.innerHTML = `<div style="background:white; padding:6px 10px; border-radius:4px; box-shadow:0 2px 6px rgba(0,0,0,0.3); white-space:nowrap;">${popupText}</div>`;
+      const popup = new ol.Overlay({
+        element: popupElement,
+        positioning: 'bottom-center',
+        stopEvent: false,
+        offset: [0, -20]
+      });
+      mapInstance.addOverlay(popup);
+      popup.setPosition(coord);
+    }
+
+    mapInstance.getView().setCenter(coord);
+    mapInstance.getView().setZoom(zoom);
+
+    // Final size update after adding content
+    setTimeout(() => mapInstance.updateSize(), 120);
   };
 
-  // Resize observer for future changes
+  // Resize observer for dynamic changes
   if ('ResizeObserver' in window) {
-    new ResizeObserver(() => mapInstance?.invalidateSize()).observe(document.getElementById('usMapContainer'));
+    new ResizeObserver(() => mapInstance?.updateSize()).observe(document.getElementById('usMapContainer'));
   }
 
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
-      pos => addMarkerAndCenter(pos.coords.latitude, pos.coords.longitude, 'Your location (browser geolocation)', 7),
+      pos => {
+        addLocation(
+          pos.coords.longitude,
+          pos.coords.latitude,
+          'Your location (browser geolocation)',
+          7,
+          pos.coords.accuracy
+        );
+      },
       () => fallbackToIP(),
-      { timeout: 10000 }
+      { timeout: 10000, enableHighAccuracy: true }
     );
   } else {
     fallbackToIP();
@@ -283,9 +348,9 @@ function loadUSMapWithLocation() {
       .then(data => {
         if (data.latitude && data.longitude) {
           const zoom = (data.country_name === 'United States') ? 6 : 4;
-          addMarkerAndCenter(
-            data.latitude,
+          addLocation(
             data.longitude,
+            data.latitude,
             `Approx: ${data.city || 'Unknown'}, ${data.region || data.country_name} (IP)`,
             zoom
           );
@@ -297,8 +362,9 @@ function loadUSMapWithLocation() {
   }
 
   function showNoLocation() {
-    mapInstance.setView([39.8283, -98.5795], 4);
-    setTimeout(() => mapInstance.invalidateSize(true), 200);
+    mapInstance.getView().setCenter(ol.proj.fromLonLat([-98.5795, 39.8283]));
+    mapInstance.getView().setZoom(4);
+    setTimeout(() => mapInstance.updateSize(), 200);
     alert('Could not determine your location.');
   }
 }
