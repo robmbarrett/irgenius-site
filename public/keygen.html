@@ -201,49 +201,36 @@ document.getElementById('confirmYes').onclick = () => {
 
   mapScreen.style.display = 'block';
 
-  // Force initial reflow
+  // Force layout/reflow now that container is visible
   void container.offsetHeight;
 
   document.getElementById('status').textContent = 'Backup confirmed → loading map...';
 
-  // Chain: wait for paint → init map → force sizes multiple times
-  requestAnimationFrame(() => {
-    setTimeout(() => {
-      if (!mapInstance) {
-        mapInstance = new ol.Map({
-          target: 'usMapContainer',
-          layers: [
-            new ol.layer.Tile({
-              source: new ol.source.OSM({
-                attributions: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              })
+  // Delay map creation slightly for mobile browsers to compute real size
+  setTimeout(() => {
+    if (!mapInstance) {
+      mapInstance = new ol.Map({
+        target: 'usMapContainer',
+        layers: [
+          new ol.layer.Tile({
+            source: new ol.source.OSM({
+              attributions: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             })
-          ],
-          view: new ol.View({
-            center: ol.proj.fromLonLat([-96, 37.8]),
-            zoom: 4
-          }),
-          controls: ol.control.defaults().extend([new ol.control.Zoom()])
-        });
+          })
+        ],
+        view: new ol.View({
+          center: ol.proj.fromLonLat([-96, 37.8]),
+          zoom: 4
+        }),
+        controls: ol.control.defaults().extend([new ol.control.Zoom()])
+      });
 
-        // Remove previous location layer if any
-        if (locationLayer) {
-          mapInstance.removeLayer(locationLayer);
-        }
-      }
+      // One final updateSize right after init
+      setTimeout(() => mapInstance.updateSize(), 100);
+    }
 
-      // Staggered size updates – critical for display:none → block transition
-      setTimeout(() => mapInstance.updateSize(), 50);
-      setTimeout(() => mapInstance.updateSize(), 150);
-      setTimeout(() => {
-        mapInstance.updateSize();
-        container.classList.add('force-reflow');
-        setTimeout(() => container.classList.remove('force-reflow'), 100);
-      }, 300);
-
-      loadUSMapWithLocation();
-    }, 80);
-  });
+    loadUSMapWithLocation();
+  }, 150);  // 150ms is usually enough; increase to 300 if still blank on some devices
 };
 
 document.getElementById('confirmNo').onclick = () => {
@@ -258,28 +245,28 @@ function loadUSMapWithLocation() {
   const addLocation = (lon, lat, popupText, zoom = 7, accuracy = 0) => {
     const coord = ol.proj.fromLonLat([lon, lat]);
 
-    // Vector source/layer for blue dot + accuracy
+    // Remove previous location layer
+    if (locationLayer) {
+      mapInstance.removeLayer(locationLayer);
+    }
+
     const features = [];
 
     // Blue pulsing dot
-    const pointFeature = new ol.Feature({
-      geometry: new ol.geom.Point(coord)
-    });
+    const pointFeature = new ol.Feature(new ol.geom.Point(coord));
     features.push(pointFeature);
 
     // Accuracy circle if available
-    let accuracyFeature = null;
     if (accuracy > 0) {
-      accuracyFeature = new ol.Feature({
-        geometry: new ol.geom.Circle(coord, accuracy)
-      });
-      features.push(accuracyFeature);
+      const circleFeature = new ol.Feature(new ol.geom.Circle(coord, accuracy));
+      features.push(circleFeature);
     }
 
     locationLayer = new ol.layer.Vector({
-      source: new ol.source.Vector({ features: features }),
+      source: new ol.source.Vector({ features }),
       style: (feature) => {
-        if (feature.getGeometry().getType() === 'Point') {
+        const geomType = feature.getGeometry().getType();
+        if (geomType === 'Point') {
           return new ol.style.Style({
             image: new ol.style.Circle({
               radius: 12,
@@ -287,7 +274,8 @@ function loadUSMapWithLocation() {
               stroke: new ol.style.Stroke({ color: '#ffffff', width: 3 })
             })
           });
-        } else if (feature.getGeometry().getType() === 'Circle') {
+        }
+        if (geomType === 'Circle') {
           return new ol.style.Style({
             stroke: new ol.style.Stroke({ color: '#3388ff', width: 2 }),
             fill: new ol.style.Fill({ color: 'rgba(51, 136, 255, 0.2)' })
@@ -295,15 +283,15 @@ function loadUSMapWithLocation() {
         }
       }
     });
-    locationLayer.set('name', 'locationLayer');
+
     mapInstance.addLayer(locationLayer);
 
     // Popup overlay
     if (popupText) {
-      const popupElement = document.createElement('div');
-      popupElement.innerHTML = `<div style="background:white; padding:6px 10px; border-radius:4px; box-shadow:0 2px 6px rgba(0,0,0,0.3); white-space:nowrap;">${popupText}</div>`;
+      const popupEl = document.createElement('div');
+      popupEl.innerHTML = `<div style="background:white; padding:6px 10px; border-radius:4px; box-shadow:0 2px 6px rgba(0,0,0,0.3); white-space:nowrap;">${popupText}</div>`;
       const popup = new ol.Overlay({
-        element: popupElement,
+        element: popupEl,
         positioning: 'bottom-center',
         stopEvent: false,
         offset: [0, -20]
@@ -315,11 +303,11 @@ function loadUSMapWithLocation() {
     mapInstance.getView().setCenter(coord);
     mapInstance.getView().setZoom(zoom);
 
-    // Final size update after adding content
-    setTimeout(() => mapInstance.updateSize(), 120);
+    // Final nudge for rendering on mobile
+    setTimeout(() => mapInstance.updateSize(), 150);
   };
 
-  // Resize observer for dynamic changes
+  // Resize observer for dynamic container changes
   if ('ResizeObserver' in window) {
     new ResizeObserver(() => mapInstance?.updateSize()).observe(document.getElementById('usMapContainer'));
   }
@@ -336,7 +324,7 @@ function loadUSMapWithLocation() {
         );
       },
       () => fallbackToIP(),
-      { timeout: 10000, enableHighAccuracy: true }
+      { timeout: 15000, enableHighAccuracy: true }
     );
   } else {
     fallbackToIP();
