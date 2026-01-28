@@ -191,13 +191,10 @@ document.getElementById('confirmYes').onclick = () => {
   const container = document.getElementById('usMapContainer');
 
   mapScreen.style.display = 'block';
-
-  // Force layout/reflow
   void container.offsetHeight;
 
   document.getElementById('status').textContent = 'Backup confirmed → loading map...';
 
-  // Delay for mobile layout/paint
   setTimeout(() => {
     console.log('Container size before map init:', container.clientWidth, container.clientHeight);
 
@@ -209,7 +206,11 @@ document.getElementById('confirmYes').onclick = () => {
           sources: {
             osm: {
               type: 'raster',
-              tiles: ['https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'],
+              tiles: [
+                'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'
+              ],
               tileSize: 256,
               attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             }
@@ -228,18 +229,17 @@ document.getElementById('confirmYes').onclick = () => {
         zoom: 4
       });
 
-      // Nudge for mobile canvas
       container.style.visibility = 'hidden';
       void container.offsetHeight;
       container.style.visibility = 'visible';
 
-      // Resize calls
-      setTimeout(() => { mapInstance.resize(); console.log('After resize 1:', container.clientWidth, container.clientHeight); }, 100);
-      setTimeout(() => mapInstance.resize(), 250);
+      setTimeout(() => mapInstance.resize(), 100);
+      setTimeout(() => mapInstance.resize(), 300);
+      setTimeout(() => mapInstance.resize(), 600);
     }
 
     loadUSMapWithLocation();
-  }, 300);
+  }, 400);
 };
 
 document.getElementById('confirmNo').onclick = () => {
@@ -254,7 +254,6 @@ function loadUSMapWithLocation() {
   const addLocation = (lng, lat, popupText, zoom = 7, accuracy = 0) => {
     const lngLat = [lng, lat];
 
-    // Blue dot (circle)
     mapInstance.addSource('user-point', {
       type: 'geojson',
       data: {
@@ -279,7 +278,6 @@ function loadUSMapWithLocation() {
       }
     });
 
-    // Accuracy circle
     if (accuracy > 0) {
       mapInstance.addSource('accuracy', {
         type: 'geojson',
@@ -306,7 +304,6 @@ function loadUSMapWithLocation() {
       });
     }
 
-    // Popup
     if (popupText) {
       new maplibregl.Popup({ offset: 25, closeButton: false })
         .setLngLat(lngLat)
@@ -317,11 +314,24 @@ function loadUSMapWithLocation() {
     mapInstance.setCenter(lngLat);
     mapInstance.setZoom(zoom);
 
-    // Final resize
-    setTimeout(() => mapInstance.resize(), 150);
+    setTimeout(() => {
+      mapInstance.resize();
+      const currentZoom = mapInstance.getZoom();
+      mapInstance.easeTo({
+        zoom: currentZoom + 0.5,
+        duration: 400
+      }, { essential: true });
+      setTimeout(() => {
+        mapInstance.easeTo({
+          zoom: currentZoom,
+          duration: 400
+        }, { essential: true });
+        mapInstance.resize();
+      }, 600);
+      console.log('Triggered zoom animation + resize to force tile load');
+    }, 800);
   };
 
-  // Watch for size changes
   if ('ResizeObserver' in window) {
     new ResizeObserver(() => mapInstance?.resize()).observe(document.getElementById('usMapContainer'));
   }
