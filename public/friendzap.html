@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Friendzap - Nostr Client</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f0f0f;
+      color: #e0e0e0;
+      height: 100vh;
+      overflow: hidden;
+    }
+    #header {
+      background: #1a1a1a;
+      padding: 12px 20px;
+      border-bottom: 1px solid #333;
+      font-size: 28px;
+      font-weight: bold;
+      text-align: center;
+      letter-spacing: 1px;
+    }
+    .container {
+      display: flex;
+      height: calc(100vh - 60px);
+    }
+    .pane {
+      border-right: 1px solid #333;
+      overflow-y: auto;
+      padding: 20px;
+    }
+    .left-pane {
+      width: 280px;
+      background: #111;
+    }
+    .center-pane {
+      flex: 1;
+      background: #0a0a0a;
+      padding-top: 0;
+    }
+    .right-pane {
+      width: 320px;
+      background: #111;
+    }
+    .nav-item {
+      padding: 14px 20px;
+      cursor: pointer;
+      font-size: 18px;
+      border-bottom: 1px solid #222;
+    }
+    .nav-item:hover, .nav-item.active {
+      background: #222;
+    }
+    .section {
+      display: none;
+    }
+    .section.active {
+      display: block;
+    }
+    .settings-form {
+      margin-top: 20px;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      background: #222;
+      border: 1px solid #444;
+      color: white;
+      border-radius: 4px;
+    }
+    button {
+      padding: 10px 20px;
+      background: #0066cc;
+      border: none;
+      color: white;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #0055aa;
+    }
+    .price-box {
+      background: #1e1e1e;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+      text-align: center;
+    }
+    .price-box h2 {
+      margin: 0 0 10px;
+      font-size: 24px;
+    }
+    .price {
+      font-size: 32px;
+      font-weight: bold;
+      color: #f7931a;
+    }
+    .note-placeholder {
+      text-align: center;
+      margin-top: 100px;
+      color: #888;
+      font-size: 18px;
+    }
+  </style>
+  <!-- CoinGecko API for BTC price (free, no key needed for this endpoint) -->
+  <script>
+    async function fetchBitcoinPrice() {
+      try {
+        const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
+        const data = await res.json();
+        const price = data.bitcoin.usd;
+        document.getElementById('btc-price').textContent = `$${price.toLocaleString()}`;
+      } catch (err) {
+        document.getElementById('btc-price').textContent = 'Error fetching price';
+      }
+    }
+
+    // 200WMA: No simple free API endpoint exists for live value.
+    // Placeholder based on recent chart data (~$104k range as of early 2026).
+    // For real use: Embed TradingView widget, or fetch weekly OHLC from Coingecko API and compute SMA client-side.
+    function set200WMA() {
+      // Approximate current value from public charts (update manually or automate later)
+      const wmaValue = 104000; // Example placeholder — replace with real calc or API if available
+      document.getElementById('btc-200wma').textContent = `~$${wmaValue.toLocaleString()}`;
+    }
+
+    window.onload = () => {
+      fetchBitcoinPrice();
+      set200WMA();
+      // Refresh price every 60 seconds
+      setInterval(fetchBitcoinPrice, 60000);
+    };
+
+    function showSection(id) {
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      event.target.classList.add('active');
+    }
+
+    function saveRelays() {
+      const relay1 = document.getElementById('relay1').value.trim();
+      const relay2 = document.getElementById('relay2').value.trim();
+      if (relay1 || relay2) {
+        console.log('Relays saved (for now just logged):', { relay1, relay2 });
+        alert('Relays saved! (Check console — expand this to connect Nostr later)');
+        // Later: Use nostr-tools to connect to these relays only
+      } else {
+        alert('Enter at least one relay URL');
+      }
+    }
+  </script>
+</head>
+<body>
+
+  <div id="header">Friendzap</div>
+
+  <div class="container">
+    <!-- Left Pane -->
+    <div class="pane left-pane">
+      <div class="nav-item active" onclick="showSection('home')">Home</div>
+      <div class="nav-item" onclick="showSection('settings')">Settings</div>
+
+      <div id="settings" class="section">
+        <h3>Network Settings</h3>
+        <div class="settings-form">
+          <label>Relay 1 (wss://...):</label>
+          <input type="text" id="relay1" placeholder="wss://your-relay.example.com" value="wss://relay.damus.io" />
+          
+          <label>Relay 2 (optional):</label>
+          <input type="text" id="relay2" placeholder="wss://another-relay.com" />
+          
+          <button onclick="saveRelays()">Save Relays</button>
+          <p style="font-size:14px; color:#aaa; margin-top:20px;">
+            (Later: We'll use these to connect and fetch notes only from your relays.)
+          </p>
+        </div>
+      </div>
+
+      <div id="home" class="section active">
+        <!-- Home can have more later, e.g. trending or quick links -->
+        <p style="color:#888;">Welcome to Friendzap</p>
+      </div>
+    </div>
+
+    <!-- Center Pane: Notes / Feed -->
+    <div class="pane center-pane">
+      <div class="note-placeholder">
+        Notes / Feed will appear here once relays are connected.<br><br>
+        (Next step: Add nostr-tools.js + WebSocket connections to your relays<br>
+        and subscribe to kind:1 events for the feed.)
+      </div>
+    </div>
+
+    <!-- Right Pane: BTC Info -->
+    <div class="pane right-pane">
+      <div class="price-box">
+        <h2>Bitcoin Price</h2>
+        <div id="btc-price" class="price">Loading...</div>
+      </div>
+      
+      <div class="price-box">
+        <h2>Bitcoin 200-Week MA</h2>
+        <div id="btc-200wma" class="price">Loading...</div>
+        <p style="font-size:14px; color:#aaa;">
+          (Approximate — based on recent charts. For live/accurate:<br>
+          Consider embedding TradingView widget or calculating from historical data.)
+        </p>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
