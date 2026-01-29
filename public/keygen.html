@@ -65,7 +65,13 @@
       margin: 10px 0; 
     }
     .actions { text-align: center; margin-top: 20px; }
-    #status { color: #7f8c8d; font-size: 0.95em; margin-top: 10px; }
+    #status { 
+      color: #7f8c8d; 
+      font-size: 0.95em; 
+      margin-top: 10px; 
+      transition: all 0.4s ease;
+      line-height: 1.5;
+    }
 
     #usMapContainer { 
       width: 100%; 
@@ -123,6 +129,8 @@
 
 <script>
 let mapInstance = null;
+let generatedNsec = null;
+let generatedNpub = null;
 
 function generateKey() {
   const btn = document.getElementById('generateBtn');
@@ -139,18 +147,42 @@ function generateKey() {
 
   try {
     const secretKey = NostrTools.generateSecretKey();
-    const pubkey   = NostrTools.getPublicKey(secretKey);
-    const nsec     = NostrTools.nip19.nsecEncode(secretKey);
-    const npub     = NostrTools.nip19.npubEncode(pubkey);
+    const pubkey    = NostrTools.getPublicKey(secretKey);
+    const nsec      = NostrTools.nip19.nsecEncode(secretKey);
+    const npub      = NostrTools.nip19.npubEncode(pubkey);
+
+    // Store for later use
+    generatedNsec = nsec;
+    generatedNpub = npub;
 
     document.getElementById('nsec').textContent = nsec;
     document.getElementById('npub').textContent = npub;
 
-    document.getElementById('result').style.display       = 'block';
-    document.getElementById('confirmation').style.display = 'none';
-    document.getElementById('mapScreen').style.display    = 'none';
+    // Hide introductory content
+    document.querySelector('h1').style.display = 'none';
+    document.querySelector('p').style.display = 'none';
+    btn.style.display = 'none';
+    status.style.display = 'none';  // temporarily hide to change content
 
-    status.textContent = 'Key generated! Please create a backup.';
+    // Show result area
+    document.getElementById('result').style.display = 'block';
+
+    // Show new prominent message at top
+    status.innerHTML = 
+      'Key Generated! Please create a backup.<br><br>' +
+      '<div style="font-size:1.3em; font-weight:bold; color:#27ae60; margin:30px 0 40px;">' +
+      'Scroll Down ↓' +
+      '</div>';
+    status.style.display = 'block';
+    status.style.fontSize = '1.5em';
+    status.style.fontWeight = 'bold';
+    status.style.color = '#2c3e50';
+    status.style.marginTop = '20px';
+    status.style.marginBottom = '30px';
+
+    // Smooth scroll to the result section
+    document.getElementById('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
   } catch (err) {
     status.textContent = 'Error: ' + err.message;
     console.error('Key generation failed:', err);
@@ -160,13 +192,11 @@ function generateKey() {
 }
 
 function downloadBackup() {
-  const nsec = document.getElementById('nsec').textContent;
-  const npub = document.getElementById('npub').textContent;
-  if (!nsec) return alert('No key generated yet.');
+  if (!generatedNsec) return alert('No key generated yet.');
 
   const text = `Nostr Key Backup - ${new Date().toISOString()}
-Secret Key (nsec): ${nsec}
-Public Key (npub): ${npub}
+Secret Key (nsec): ${generatedNsec}
+Public Key (npub): ${generatedNpub}
 
 ⚠️ NEVER share your nsec! Store offline securely.`;
 
