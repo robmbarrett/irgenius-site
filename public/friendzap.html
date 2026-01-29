@@ -4,13 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Friendzap - Nostr Client</title>
-  <!-- Updated CDN: jsDelivr +esm for latest nostr-tools (2026 compatible) -->
+  <!-- Reliable ESM import via esm.sh (fixes MIME/CORS issues) -->
   <script type="module">
-    import * as nostrTools from 'https://cdn.jsdelivr.net/npm/nostr-tools@2.21.0/+esm';
-    window.nostrTools = nostrTools;  // Expose globally so non-module code can use it
+    import * as nostrTools from 'https://esm.sh/nostr-tools@2.21.0';
+    window.nostrTools = nostrTools;
   </script>
   <style>
-    /* Previous styles unchanged – add if missing from your copy */
     body { margin:0; font-family:sans-serif; background:#0f0f0f; color:#e0e0e0; height:100vh; overflow:hidden; }
     #header { background:#1a1a1a; padding:12px; text-align:center; font-size:28px; font-weight:bold; border-bottom:1px solid #333; }
     .container { display:flex; height:calc(100vh - 60px); }
@@ -54,7 +53,7 @@
     function getRelays() {
       return [
         document.getElementById('relay1')?.value.trim() || 'wss://relay.damus.io',
-        document.getElementById('relay2')?.value.trim() || ''
+        document.getElementById('relay2')?.value.trim() || 'wss://nos.lol'
       ].filter(Boolean);
     }
 
@@ -65,28 +64,34 @@
       if (relayPool) relayPool.close();
       if (sub) sub.unsub();
 
-      try {
-        relayPool = new window.nostrTools.RelayPool(relays);
-      } catch (e) {
-        console.error('RelayPool failed:', e);
-        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Error initializing Nostr (check console)</p>';
+      if (!window.nostrTools?.RelayPool) {
+        console.error('nostrTools not loaded - check import');
+        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Nostr library failed to load (check console for details)</p>';
         return;
       }
 
-      relayPool.on('open', r => console.log('Open:', r.url));
-      relayPool.on('error', (_, e) => console.error('Relay err:', e));
+      try {
+        relayPool = new window.nostrTools.RelayPool(relays);
+      } catch (e) {
+        console.error('RelayPool init failed:', e);
+        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Error: ' + e.message + ' (check console)</p>';
+        return;
+      }
+
+      relayPool.on('open', r => console.log('Connected to:', r.url));
+      relayPool.on('error', (_, e) => console.error('Relay error:', e));
 
       relayPool.connect();
 
-      const since = Math.floor(Date.now() / 1000) - 86400 * 7; // 7 days for more content
+      const since = Math.floor(Date.now() / 1000) - 86400 * 7; // Last 7 days
       sub = relayPool.sub([{ kinds: [1], since }]);
 
       sub.on('event', e => {
-        console.log('Event received');
+        console.log('Got event');
         renderNote(e);
       });
 
-      document.getElementById('feed').innerHTML = '<p style="color:#4caf50; text-align:center;">Connected – fetching notes...</p>';
+      document.getElementById('feed').innerHTML = '<p style="color:#4caf50; text-align:center;">Connected – fetching notes (may take a moment)...</p>';
     }
 
     function renderNote(event) {
@@ -106,7 +111,7 @@
 
     async function tryLogin() {
       if (!window.nostr) {
-        alert('No NIP-07 extension found. Install Alby/Nos2x/etc. and reload.');
+        alert('No NIP-07 extension (like Alby) detected. Install/reload and try again.');
         return;
       }
       try {
@@ -118,7 +123,7 @@
         document.getElementById('main-content').classList.remove('hidden');
         connectAndSubscribe();
       } catch (err) {
-        alert('Connection denied or failed: ' + err.message);
+        alert('Connection denied: ' + err.message);
       }
     }
 
@@ -144,9 +149,9 @@
 
   <div id="login-screen">
     <h1>Friendzap</h1>
-    <p>Connect securely with your Nostr extension (Alby, Nos2x, etc.)</p>
+    <p>Connect securely with your Nostr extension (Alby works great!)</p>
     <button class="login-btn" onclick="tryLogin()">Connect with Nostr Extension</button>
-    <p style="font-size:14px; color:#aaa;">If loading is slow, wait or refresh after extension is ready.</p>
+    <p style="font-size:14px; color:#aaa;">If slow to load, wait a few seconds or refresh after Alby is ready.</p>
   </div>
 
   <div id="main-content" class="hidden">
@@ -158,7 +163,7 @@
         <div class="nav-item" onclick="document.querySelector('#settings').classList.add('active'); document.querySelector('#home').classList.remove('active');">Settings</div>
 
         <div id="home" class="section active">
-          <p style="color:#888;">Feed loading...</p>
+          <p style="color:#888;">Your feed is loading...</p>
           <button class="retry" onclick="connectAndSubscribe()">Retry / Refresh Feed</button>
         </div>
 
@@ -166,7 +171,7 @@
           <h3>Network Settings</h3>
           <label>Relay 1:</label><input type="text" id="relay1" value="wss://relay.damus.io" style="width:100%; padding:8px; margin:8px 0; background:#222; color:white; border:1px solid #444;"/>
           <label>Relay 2 (optional):</label><input type="text" id="relay2" value="wss://nos.lol" style="width:100%; padding:8px; margin:8px 0; background:#222; color:white; border:1px solid #444;"/>
-          <button onclick="connectAndSubscribe()" style="padding:10px 20px; background:#0066cc; color:white; border:none; border-radius:4px; cursor:pointer;">Save & Refresh</button>
+          <button onclick="connectAndSubscribe()" style="padding:10px 20px; background:#0066cc; color:white; border:none; border-radius:4px; cursor:pointer; margin-top:10px;">Save & Refresh</button>
           <button onclick="logout()" style="margin-top:20px; padding:10px 20px; background:#cc0000; color:white; border:none; border-radius:4px; cursor:pointer;">Disconnect</button>
         </div>
       </div>
@@ -182,7 +187,7 @@
         </div>
         <div style="background:#1e1e1e; padding:20px; border-radius:8px; text-align:center;">
           <h2>Bitcoin 200-Week MA</h2>
-          <div id="btc-200wma" style="font-size:32px; font-weight:bold; color:#f7931a;">Loading...</div>
+          <div id="btc-200wma" style="font-size:32px; font-weight:bold; color:#f7931a;">~$57849</div>
         </div>
       </div>
     </div>
