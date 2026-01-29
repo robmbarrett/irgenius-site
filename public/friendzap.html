@@ -4,11 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Friendzap - Nostr Client</title>
-  <!-- Reliable ESM import via esm.sh (fixes MIME/CORS issues) -->
-  <script type="module">
-    import * as nostrTools from 'https://esm.sh/nostr-tools@2.21.0';
-    window.nostrTools = nostrTools;
-  </script>
+  <!-- Browser bundle – reliable, no MIME/dependency issues -->
+  <script src="https://unpkg.com/nostr-tools@2.21.0/lib/nostr.bundle.js"></script>
   <style>
     body { margin:0; font-family:sans-serif; background:#0f0f0f; color:#e0e0e0; height:100vh; overflow:hidden; }
     #header { background:#1a1a1a; padding:12px; text-align:center; font-size:28px; font-weight:bold; border-bottom:1px solid #333; }
@@ -43,7 +40,7 @@
         const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
         const data = await res.json();
         document.getElementById('btc-price').textContent = `$${data.bitcoin.usd.toLocaleString('en-US', {minimumFractionDigits: 0})}`;
-      } catch {}
+      } catch (e) { console.error('Price fetch error:', e); }
     }
 
     function set200WMA() {
@@ -51,10 +48,9 @@
     }
 
     function getRelays() {
-      return [
-        document.getElementById('relay1')?.value.trim() || 'wss://relay.damus.io',
-        document.getElementById('relay2')?.value.trim() || 'wss://nos.lol'
-      ].filter(Boolean);
+      const r1 = document.getElementById('relay1')?.value.trim() || 'wss://relay.damus.io';
+      const r2 = document.getElementById('relay2')?.value.trim() || 'wss://nos.lol';
+      return [r1, r2].filter(Boolean);
     }
 
     function connectAndSubscribe() {
@@ -64,54 +60,62 @@
       if (relayPool) relayPool.close();
       if (sub) sub.unsub();
 
-      if (!window.nostrTools?.RelayPool) {
-        console.error('nostrTools not loaded - check import');
-        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Nostr library failed to load (check console for details)</p>';
+      if (!window.nostrTools || !window.nostrTools.RelayPool) {
+        console.error('nostrTools bundle not loaded properly');
+        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Nostr library failed to load – check network/console for unpkg errors</p>';
         return;
       }
 
       try {
         relayPool = new window.nostrTools.RelayPool(relays);
       } catch (e) {
-        console.error('RelayPool init failed:', e);
-        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Error: ' + e.message + ' (check console)</p>';
+        console.error('RelayPool failed:', e);
+        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Error initializing: ' + e.message + '</p>';
         return;
       }
 
-      relayPool.on('open', r => console.log('Connected to:', r.url));
-      relayPool.on('error', (_, e) => console.error('Relay error:', e));
+      relayPool.on('open', relay => {
+        console.log('Connected to:', relay.url);
+      });
+      relayPool.on('error', (relay, err) => {
+        console.error('Relay error:', relay?.url, err);
+      });
 
       relayPool.connect();
 
-      const since = Math.floor(Date.now() / 1000) - 86400 * 7; // Last 7 days
+      const since = Math.floor(Date.now() / 1000) - (86400 * 7);
       sub = relayPool.sub([{ kinds: [1], since }]);
 
-      sub.on('event', e => {
-        console.log('Got event');
-        renderNote(e);
+      sub.on('event', event => {
+        console.log('Event received:', event.id.slice(0,8));
+        renderNote(event);
       });
 
-      document.getElementById('feed').innerHTML = '<p style="color:#4caf50; text-align:center;">Connected – fetching notes (may take a moment)...</p>';
+      document.getElementById('feed').innerHTML = '<p style="color:#4caf50; text-align:center;">Connected – fetching notes...</p>';
     }
 
     function renderNote(event) {
       const feed = document.getElementById('feed');
       const short = event.pubkey.slice(0,8) + '…' + event.pubkey.slice(-8);
-      const time = new Date(event.created_at * 1000).toLocaleString([], {hour:'2-digit', minute:'2-digit', month:'short', day:'numeric'});
+      const time = new Date(event.created_at * 1000).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' });
 
       const div = document.createElement('div');
       div.className = 'note';
-      div.innerHTML = `<div class="pubkey">npub1${short}</div><div class="content">${escapeHtml(event.content)}</div><div class="time">${time}</div>`;
+      div.innerHTML = `
+        <div class="pubkey">npub1${short}</div>
+        <div class="content">${escapeHtml(event.content)}</div>
+        <div class="time">${time}</div>
+      `;
       feed.insertBefore(div, feed.firstChild);
     }
 
-    function escapeHtml(s) {
-      return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#039;'})[c]);
+    function escapeHtml(unsafe) {
+      return unsafe.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[m]);
     }
 
     async function tryLogin() {
       if (!window.nostr) {
-        alert('No NIP-07 extension (like Alby) detected. Install/reload and try again.');
+        alert('No NIP-07 extension detected (Alby/Nos2x/etc.). Install one and reload.');
         return;
       }
       try {
@@ -123,7 +127,7 @@
         document.getElementById('main-content').classList.remove('hidden');
         connectAndSubscribe();
       } catch (err) {
-        alert('Connection denied: ' + err.message);
+        alert('Login denied/failed: ' + err.message);
       }
     }
 
@@ -149,9 +153,9 @@
 
   <div id="login-screen">
     <h1>Friendzap</h1>
-    <p>Connect securely with your Nostr extension (Alby works great!)</p>
+    <p>Connect with your Nostr extension (Alby is working for you!)</p>
     <button class="login-btn" onclick="tryLogin()">Connect with Nostr Extension</button>
-    <p style="font-size:14px; color:#aaa;">If slow to load, wait a few seconds or refresh after Alby is ready.</p>
+    <p style="font-size:14px; color:#aaa;">Wait a few seconds if slow – unpkg bundle loads first.</p>
   </div>
 
   <div id="main-content" class="hidden">
@@ -159,20 +163,22 @@
     <div class="container">
       <div class="pane left-pane">
         <div id="user-info"></div>
-        <div class="nav-item active" onclick="document.querySelector('#home').classList.add('active'); document.querySelector('#settings').classList.remove('active');">Home</div>
-        <div class="nav-item" onclick="document.querySelector('#settings').classList.add('active'); document.querySelector('#home').classList.remove('active');">Settings</div>
+        <div class="nav-item active" onclick="showSection('home')">Home</div>
+        <div class="nav-item" onclick="showSection('settings')">Settings</div>
 
         <div id="home" class="section active">
-          <p style="color:#888;">Your feed is loading...</p>
+          <p style="color:#888;">Feed loading from relays...</p>
           <button class="retry" onclick="connectAndSubscribe()">Retry / Refresh Feed</button>
         </div>
 
         <div id="settings" class="section">
           <h3>Network Settings</h3>
-          <label>Relay 1:</label><input type="text" id="relay1" value="wss://relay.damus.io" style="width:100%; padding:8px; margin:8px 0; background:#222; color:white; border:1px solid #444;"/>
-          <label>Relay 2 (optional):</label><input type="text" id="relay2" value="wss://nos.lol" style="width:100%; padding:8px; margin:8px 0; background:#222; color:white; border:1px solid #444;"/>
-          <button onclick="connectAndSubscribe()" style="padding:10px 20px; background:#0066cc; color:white; border:none; border-radius:4px; cursor:pointer; margin-top:10px;">Save & Refresh</button>
-          <button onclick="logout()" style="margin-top:20px; padding:10px 20px; background:#cc0000; color:white; border:none; border-radius:4px; cursor:pointer;">Disconnect</button>
+          <label>Relay 1:</label>
+          <input type="text" id="relay1" value="wss://relay.damus.io" style="width:100%; padding:8px; margin:8px 0; background:#222; color:white; border:1px solid #444;"/>
+          <label>Relay 2 (optional):</label>
+          <input type="text" id="relay2" value="wss://nos.lol" style="width:100%; padding:8px; margin:8px 0; background:#222; color:white; border:1px solid #444;"/>
+          <button onclick="connectAndSubscribe()" style="padding:10px 20px; background:#0066cc; color:white; border:none; border-radius:4px; cursor:pointer; margin:10px 0;">Save & Refresh</button>
+          <button onclick="logout()" style="padding:10px 20px; background:#cc0000; color:white; border:none; border-radius:4px; cursor:pointer;">Disconnect</button>
         </div>
       </div>
 
@@ -192,6 +198,15 @@
       </div>
     </div>
   </div>
+
+  <script>
+    function showSection(id) {
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      event.target.classList.add('active');
+    }
+  </script>
 
 </body>
 </html>
