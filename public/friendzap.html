@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Friendzap - Nostr Client</title>
+  <script src="https://unpkg.com/nostr-tools@2.19.4/lib/nostr.bundle.js"></script>
   <style>
     body {
       margin: 0;
@@ -98,11 +99,26 @@
       font-weight: bold;
       color: #f7931a;
     }
-    .note-placeholder {
-      text-align: center;
-      margin-top: 100px;
+    .note {
+      background: #1e1e1e;
+      padding: 12px;
+      margin: 12px 0;
+      border-radius: 8px;
+      border: 1px solid #333;
+    }
+    .note .pubkey {
       color: #888;
-      font-size: 18px;
+      font-size: 14px;
+      margin-bottom: 6px;
+    }
+    .note .content {
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .note .time {
+      color: #666;
+      font-size: 12px;
+      margin-top: 8px;
     }
     .quick-steps {
       margin-top: 30px;
@@ -120,8 +136,10 @@
       margin: 10px 0;
     }
   </style>
-  <!-- CoinGecko API for BTC price (free, no key needed) -->
   <script>
+    let relayPool = null;
+    let sub = null;
+
     async function fetchBitcoinPrice() {
       try {
         const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
@@ -133,19 +151,83 @@
       }
     }
 
-    // 200WMA placeholder (slow-moving; approx from Jan 2026 sources ~$57-60k range)
-    // For accuracy: Fetch weekly historical data from CoinGecko and compute WMA in JS.
     function set200WMA() {
-      const wmaValue = 57823; // Approximate from recent heatmap data; update as needed
+      const wmaValue = 57849; // Approx from Jan 2026 sources (MacroMicro/Newhedge ~$57,849)
       document.getElementById('btc-200wma').textContent = `~$${wmaValue.toLocaleString('en-US', {minimumFractionDigits: 0})}`;
+    }
+
+    function getRelays() {
+      const r1 = document.getElementById('relay1').value.trim();
+      const r2 = document.getElementById('relay2').value.trim();
+      const relays = [];
+      if (r1) relays.push(r1);
+      if (r2) relays.push(r2);
+      if (relays.length === 0) {
+        // Fallback defaults for testing
+        relays.push('wss://relay.damus.io', 'wss://nos.lol');
+      }
+      return relays;
+    }
+
+    async function connectAndSubscribe() {
+      const relays = getRelays();
+      if (relayPool) {
+        relayPool.close();
+        if (sub) sub.unsub();
+      }
+
+      relayPool = new window.nostrTools.RelayPool(relays);
+
+      relayPool.on('open', relay => {
+        console.log('Connected to', relay.url);
+      });
+
+      relayPool.on('error', (relay, err) => {
+        console.error('Relay error', relay.url, err);
+      });
+
+      relayPool.connect();
+
+      // Subscribe to recent kind:1 notes (limit 50, since: last 24h for freshness)
+      const since = Math.floor(Date.now() / 1000) - 86400;
+      sub = relayPool.sub([{ kinds: [1], since, limit: 50 }]);
+
+      sub.on('event', event => {
+        renderNote(event);
+      });
+
+      // Clear old notes on reconnect
+      document.getElementById('feed').innerHTML = '<p style="color:#666;">Loading notes from relays...</p>';
+    }
+
+    function renderNote(event) {
+      const feed = document.getElementById('feed');
+      const shortPubkey = event.pubkey.slice(0, 8) + '...' + event.pubkey.slice(-8);
+
+      const time = new Date(event.created_at * 1000).toLocaleString([], {
+        hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric'
+      });
+
+      const div = document.createElement('div');
+      div.className = 'note';
+      div.innerHTML = `
+        <div class="pubkey">From: npub1${shortPubkey}</div>
+        <div class="content">${escapeHtml(event.content)}</div>
+        <div class="time">${time}</div>
+      `;
+      feed.insertBefore(div, feed.firstChild); // Newest first
+    }
+
+    function escapeHtml(unsafe) {
+      return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
 
     window.onload = () => {
       fetchBitcoinPrice();
       set200WMA();
-      setInterval(fetchBitcoinPrice, 60000); // Refresh every minute
-      // Default to show Home
+      setInterval(fetchBitcoinPrice, 60000);
       showSection('home');
+      connectAndSubscribe(); // Initial connect with defaults
     };
 
     function showSection(id) {
@@ -157,15 +239,8 @@
     }
 
     function saveRelays() {
-      const relay1 = document.getElementById('relay1').value.trim();
-      const relay2 = document.getElementById('relay2').value.trim();
-      if (relay1 || relay2) {
-        console.log('Relays saved:', { relay1, relay2 });
-        alert('Relays saved! (Check console. Next: Connect Nostr to fetch notes.)');
-        // TODO: Later integrate nostr-tools here to update pool
-      } else {
-        alert('Enter at least one relay URL');
-      }
+      connectAndSubscribe(); // Reconnect with new relays
+      alert('Relays updated — refreshing feed!');
     }
   </script>
 </head>
@@ -180,7 +255,7 @@
       <div class="nav-item" onclick="showSection('settings')">Settings</div>
 
       <div id="home" class="section active">
-        <p style="color:#888;">Welcome to Friendzap — your private Nostr space.</p>
+        <p style="color:#888;">Welcome to Friendzap — your private Nostr space.<br>Recent notes loading below...</p>
       </div>
 
       <div id="settings" class="section">
@@ -192,21 +267,21 @@
           <label>Relay 2 (optional):</label>
           <input type="text" id="relay2" placeholder="wss://another-relay.com" value="wss://nos.lol" />
           
-          <button onclick="saveRelays()">Save Relays</button>
+          <button onclick="saveRelays()">Save & Refresh Feed</button>
           <p style="font-size:14px; color:#aaa; margin-top:20px;">
-            These relays will be used to fetch notes (once Nostr connection is added).
+            Feed shows recent public notes (kind:1) from these relays.
           </p>
 
           <div class="quick-steps">
             <h4>Quick Next Steps</h4>
             <ol>
-              <li>Add <code>&lt;script src="https://unpkg.com/nostr-tools@latest"&gt;&lt;/script&gt;</code> and create a relay pool with your saved URLs.</li>
-              <li>Implement REQ subscription for kind:1 (text notes) → render events as simple cards in the center pane (author, content, timestamp, zaps if added later).</li>
-              <li>Add basic key management: nsec input or NIP-07 extension signer (for signing events).</li>
-              <li>Improve 200WMA: Fetch weekly candles via CoinGecko API (`/coins/bitcoin/market_chart?vs_currency=usd&days=max&interval=weekly`) and compute weighted moving average in JS, or embed a TradingView widget for the chart.</li>
-              <li>Add zap buttons using NWC (paste connection URI → limited permissions for payments).</li>
-              <li>Style notes better (avatars via NIP-05/NIP-19, replies, threads) and make it responsive/mobile-friendly.</li>
-              <li>Host on irgenius.org/friendzap (static hosting works; add service worker for offline later).</li>
+              <li>Add NIP-07 signer or nsec input for posting/signing (window.nostr for extensions).</li>
+              <li>Improve note rendering: avatars (via pubkey → picture from metadata), replies/threads, reactions, zap buttons (via NWC).</li>
+              <li>Add filters: only from followed users (kind:3 contacts), or your single relay only.</li>
+              <li>Handle more kinds (e.g., long-form, images via kind:1063).</li>
+              <li>Persist relays in localStorage so they survive refresh.</li>
+              <li>Make feed infinite (paginate with until/since).</li>
+              <li>Host on irgenius.org/friendzap — add error handling for relay fails.</li>
             </ol>
           </div>
         </div>
@@ -214,11 +289,9 @@
     </div>
 
     <!-- Center Pane: Notes / Feed -->
-    <div class="pane center-pane">
-      <div class="note-placeholder">
-        Notes / Feed will appear here once relays are connected and Nostr fetching is implemented.<br><br>
-        (Check Settings → Quick Next Steps for how to add real note loading with nostr-tools.)
-      </div>
+    <div class="pane center-pane" id="feed">
+      <!-- Notes will be inserted here dynamically -->
+      <p style="color:#666; text-align:center; margin-top:100px;">Connecting to relays and loading recent notes...</p>
     </div>
 
     <!-- Right Pane: BTC Info -->
@@ -232,7 +305,7 @@
         <h2>Bitcoin 200-Week MA</h2>
         <div id="btc-200wma" class="price">Loading...</div>
         <p style="font-size:14px; color:#aaa;">
-          (Approximate long-term average; updates slowly. For live calc: Fetch historical data or embed TradingView widget.)
+          (Long-term average ~$57,849 as of Jan 2026; slow-moving. For live chart: embed TradingView widget next?)
         </p>
       </div>
     </div>
