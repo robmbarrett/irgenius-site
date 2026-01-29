@@ -104,50 +104,65 @@
       color: #888;
       font-size: 18px;
     }
+    .quick-steps {
+      margin-top: 30px;
+      padding: 15px;
+      background: #1e1e1e;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    .quick-steps h4 {
+      margin-top: 0;
+      color: #ccc;
+    }
+    .quick-steps ol {
+      padding-left: 20px;
+      margin: 10px 0;
+    }
   </style>
-  <!-- CoinGecko API for BTC price (free, no key needed for this endpoint) -->
+  <!-- CoinGecko API for BTC price (free, no key needed) -->
   <script>
     async function fetchBitcoinPrice() {
       try {
         const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
         const data = await res.json();
         const price = data.bitcoin.usd;
-        document.getElementById('btc-price').textContent = `$${price.toLocaleString()}`;
+        document.getElementById('btc-price').textContent = `$${price.toLocaleString('en-US', {minimumFractionDigits: 0})}`;
       } catch (err) {
         document.getElementById('btc-price').textContent = 'Error fetching price';
       }
     }
 
-    // 200WMA: No simple free API endpoint exists for live value.
-    // Placeholder based on recent chart data (~$104k range as of early 2026).
-    // For real use: Embed TradingView widget, or fetch weekly OHLC from Coingecko API and compute SMA client-side.
+    // 200WMA placeholder (slow-moving; approx from Jan 2026 sources ~$57-60k range)
+    // For accuracy: Fetch weekly historical data from CoinGecko and compute WMA in JS.
     function set200WMA() {
-      // Approximate current value from public charts (update manually or automate later)
-      const wmaValue = 104000; // Example placeholder — replace with real calc or API if available
-      document.getElementById('btc-200wma').textContent = `~$${wmaValue.toLocaleString()}`;
+      const wmaValue = 57823; // Approximate from recent heatmap data; update as needed
+      document.getElementById('btc-200wma').textContent = `~$${wmaValue.toLocaleString('en-US', {minimumFractionDigits: 0})}`;
     }
 
     window.onload = () => {
       fetchBitcoinPrice();
       set200WMA();
-      // Refresh price every 60 seconds
-      setInterval(fetchBitcoinPrice, 60000);
+      setInterval(fetchBitcoinPrice, 60000); // Refresh every minute
+      // Default to show Home
+      showSection('home');
     };
 
     function showSection(id) {
       document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
       document.getElementById(id).classList.add('active');
       document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-      event.target.classList.add('active');
+      const clicked = Array.from(document.querySelectorAll('.nav-item')).find(n => n.textContent === (id === 'home' ? 'Home' : 'Settings'));
+      if (clicked) clicked.classList.add('active');
     }
 
     function saveRelays() {
       const relay1 = document.getElementById('relay1').value.trim();
       const relay2 = document.getElementById('relay2').value.trim();
       if (relay1 || relay2) {
-        console.log('Relays saved (for now just logged):', { relay1, relay2 });
-        alert('Relays saved! (Check console — expand this to connect Nostr later)');
-        // Later: Use nostr-tools to connect to these relays only
+        console.log('Relays saved:', { relay1, relay2 });
+        alert('Relays saved! (Check console. Next: Connect Nostr to fetch notes.)');
+        // TODO: Later integrate nostr-tools here to update pool
       } else {
         alert('Enter at least one relay URL');
       }
@@ -164,6 +179,10 @@
       <div class="nav-item active" onclick="showSection('home')">Home</div>
       <div class="nav-item" onclick="showSection('settings')">Settings</div>
 
+      <div id="home" class="section active">
+        <p style="color:#888;">Welcome to Friendzap — your private Nostr space.</p>
+      </div>
+
       <div id="settings" class="section">
         <h3>Network Settings</h3>
         <div class="settings-form">
@@ -171,27 +190,34 @@
           <input type="text" id="relay1" placeholder="wss://your-relay.example.com" value="wss://relay.damus.io" />
           
           <label>Relay 2 (optional):</label>
-          <input type="text" id="relay2" placeholder="wss://another-relay.com" />
+          <input type="text" id="relay2" placeholder="wss://another-relay.com" value="wss://nos.lol" />
           
           <button onclick="saveRelays()">Save Relays</button>
           <p style="font-size:14px; color:#aaa; margin-top:20px;">
-            (Later: We'll use these to connect and fetch notes only from your relays.)
+            These relays will be used to fetch notes (once Nostr connection is added).
           </p>
-        </div>
-      </div>
 
-      <div id="home" class="section active">
-        <!-- Home can have more later, e.g. trending or quick links -->
-        <p style="color:#888;">Welcome to Friendzap</p>
+          <div class="quick-steps">
+            <h4>Quick Next Steps</h4>
+            <ol>
+              <li>Add <code>&lt;script src="https://unpkg.com/nostr-tools@latest"&gt;&lt;/script&gt;</code> and create a relay pool with your saved URLs.</li>
+              <li>Implement REQ subscription for kind:1 (text notes) → render events as simple cards in the center pane (author, content, timestamp, zaps if added later).</li>
+              <li>Add basic key management: nsec input or NIP-07 extension signer (for signing events).</li>
+              <li>Improve 200WMA: Fetch weekly candles via CoinGecko API (`/coins/bitcoin/market_chart?vs_currency=usd&days=max&interval=weekly`) and compute weighted moving average in JS, or embed a TradingView widget for the chart.</li>
+              <li>Add zap buttons using NWC (paste connection URI → limited permissions for payments).</li>
+              <li>Style notes better (avatars via NIP-05/NIP-19, replies, threads) and make it responsive/mobile-friendly.</li>
+              <li>Host on irgenius.org/friendzap (static hosting works; add service worker for offline later).</li>
+            </ol>
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- Center Pane: Notes / Feed -->
     <div class="pane center-pane">
       <div class="note-placeholder">
-        Notes / Feed will appear here once relays are connected.<br><br>
-        (Next step: Add nostr-tools.js + WebSocket connections to your relays<br>
-        and subscribe to kind:1 events for the feed.)
+        Notes / Feed will appear here once relays are connected and Nostr fetching is implemented.<br><br>
+        (Check Settings → Quick Next Steps for how to add real note loading with nostr-tools.)
       </div>
     </div>
 
@@ -206,8 +232,7 @@
         <h2>Bitcoin 200-Week MA</h2>
         <div id="btc-200wma" class="price">Loading...</div>
         <p style="font-size:14px; color:#aaa;">
-          (Approximate — based on recent charts. For live/accurate:<br>
-          Consider embedding TradingView widget or calculating from historical data.)
+          (Approximate long-term average; updates slowly. For live calc: Fetch historical data or embed TradingView widget.)
         </p>
       </div>
     </div>
