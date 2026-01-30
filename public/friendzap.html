@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Friendzap - Nostr Client</title>
-  <script src="https://unpkg.com/nostr-tools@2.19.4/lib/nostr.bundle.js"></script>
   <style>
     body { margin:0; font-family:sans-serif; background:#0f0f0f; color:#e0e0e0; height:100vh; overflow:hidden; }
     #header { background:#1a1a1a; padding:12px; text-align:center; font-size:28px; font-weight:bold; border-bottom:1px solid #333; }
@@ -29,19 +28,12 @@
     .anon-btn { background:#444; color:white; }
     #user-info { font-size:16px; color:#4caf50; margin:10px 0; }
     button.retry { margin:20px auto; display:block; padding:12px 24px; background:#0066cc; color:white; border:none; border-radius:6px; cursor:pointer; }
+    input[type="text"] { width:100%; padding:8px; margin:8px 0; background:#222; color:white; border:1px solid #444; }
   </style>
   <script>
-    let pool = null;
-    let sub = null;
+    let ws = null;
     let userPubkey = null;
-
-    setTimeout(() => {
-      if (window.NostrTools && window.NostrTools.SimplePool) {
-        console.log('Success: NostrTools loaded (v2.19.4)');
-      } else {
-        console.error('NostrTools failed to load');
-      }
-    }, 1500);
+    let subscriptionId = null;
 
     async function fetchBitcoinPrice() {
       try {
@@ -55,61 +47,73 @@
       document.getElementById('btc-200wma').textContent = '~$57849';
     }
 
-    function getRelays() {
-      const r1 = (document.getElementById('relay1')?.value || '').trim();
-      const r2 = (document.getElementById('relay2')?.value || '').trim();
-      const relays = [];
-      if (r1.startsWith('wss://')) relays.push(r1);
-      if (r2.startsWith('wss://')) relays.push(r2);
-      if (relays.length === 0) relays.push('wss://relay.damus.io', 'wss://nos.lol');
-      console.log('Parsed relays array:', relays);
-      return relays.slice(); // Fresh copy to avoid reference issues
+    function getRelayUrl() {
+      let url = document.getElementById('relay1')?.value.trim();
+      if (!url || !url.startsWith('wss://')) {
+        url = 'wss://relay.damus.io';
+      }
+      console.log('Using relay:', url);
+      return url;
     }
 
     function connectAndSubscribe() {
-      const relays = getRelays();
-      console.log('Trying relays:', relays);
+      const url = getRelayUrl();
 
-      if (pool) {
-        try { pool.close(); } catch (e) { console.warn('Pool close warning:', e); }
+      if (ws) {
+        ws.close();
+        ws = null;
       }
-      if (sub) {
-        try { sub.unsub(); } catch (e) {}
-      }
+      subscriptionId = null;
 
-      if (!window.NostrTools || !window.NostrTools.SimplePool) {
-        document.getElementById('feed').innerHTML = '<p style="color:red;">Nostr library not loaded</p>';
-        return;
-      }
+      ws = new WebSocket(url);
 
-      pool = new window.NostrTools.SimplePool();
+      ws.onopen = () => {
+        console.log('Connected to', url);
+        document.getElementById('feed').innerHTML = '<p style="color:#4caf50; text-align:center;">Connected – requesting recent notes...</p>';
 
-      const since = Math.floor(Date.now() / 1000) - 86400 * 30;
-      const filters = [{ kinds: [1], since }];
+        subscriptionId = 'sub-' + Math.random().toString(36).substring(2, 10);
 
-      try {
-        // Swap order: relays first, filters second – matches most examples for v2.19.4
-        sub = pool.subscribe(relays, filters);
-        console.log('Subscription created successfully with relays first');
-      } catch (e) {
-        console.error('Subscription failed:', e);
-        document.getElementById('feed').innerHTML = '<p style="color:red;">Subscription error: ' + e.message + '</p>';
-        return;
-      }
+        const since = Math.floor(Date.now() / 1000) - 86400 * 30; // 30 days
+        const req = [
+          "REQ",
+          subscriptionId,
+          {
+            kinds: [1],
+            since,
+            limit: 50
+          }
+        ];
 
-      sub.on('event', event => {
-        console.log('Event received:', event.id.slice(0, 8));
-        renderNote(event);
-      });
+        ws.send(JSON.stringify(req));
+        console.log('Sent REQ:', req);
+      };
 
-      sub.on('eose', () => {
-        console.log('EOSE received');
-        if (document.querySelectorAll('.note').length === 0) {
-          document.getElementById('feed').innerHTML += '<p style="color:#ff9800; text-align:center;">No notes found – check relays or time window</p>';
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        console.log('Received:', msg);
+
+        if (msg[0] === 'EVENT' && msg[2].kind === 1) {
+          renderNote(msg[2]);
+        } else if (msg[0] === 'EOSE' && msg[1] === subscriptionId) {
+          console.log('EOSE received');
+          if (document.querySelectorAll('.note').length === 0) {
+            document.getElementById('feed').innerHTML += '<p style="color:#ff9800; text-align:center;">No recent notes on this relay</p>';
+          }
+        } else if (msg[0] === 'NOTICE') {
+          console.warn('Relay notice:', msg[1]);
+          document.getElementById('feed').innerHTML += '<p style="color:#ff9800;">Relay notice: ' + msg[1] + '</p>';
         }
-      });
+      };
 
-      document.getElementById('feed').innerHTML = '<p style="color:#4caf50; text-align:center;">Connected – fetching notes (wait 10–90s)...</p>';
+      ws.onerror = (err) => {
+        console.error('WS error:', err);
+        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Connection error – check relay URL</p>';
+      };
+
+      ws.onclose = () => {
+        console.log('WS closed');
+        document.getElementById('feed').innerHTML += '<p style="color:#888; text-align:center;">Connection closed</p>';
+      };
     }
 
     function renderNote(event) {
@@ -158,7 +162,7 @@
       document.getElementById('header').textContent = 'Friendzap';
       document.getElementById('login-screen').classList.remove('hidden');
       document.getElementById('main-content').classList.add('hidden');
-      if (pool) try { pool.close(); } catch {}
+      if (ws) ws.close();
     }
 
     function showSection(id) {
@@ -184,7 +188,7 @@
     <p>Connect with Alby or browse anonymously.</p>
     <button class="login-btn" onclick="tryLogin()">Connect with Alby</button>
     <button class="anon-btn" onclick="continueAnonymous()">Continue Anonymously</button>
-    <p style="font-size:14px; color:#aaa;">Wait 10–90 seconds. Look for "Event received" in console.</p>
+    <p style="font-size:14px; color:#aaa;">Wait 10–60 seconds for notes.</p>
   </div>
 
   <div id="main-content" class="hidden">
@@ -202,17 +206,15 @@
 
         <div id="settings" class="section">
           <h3>Network Settings</h3>
-          <label>Relay 1 (required):</label>
+          <label>Relay (wss://...):</label>
           <input type="text" id="relay1" value="wss://relay.damus.io" style="width:100%; padding:8px; margin:8px 0; background:#222; color:white; border:1px solid #444;"/>
-          <label>Relay 2 (optional):</label>
-          <input type="text" id="relay2" value="wss://nos.lol" style="width:100%; padding:8px; margin:8px 0; background:#222; color:white; border:1px solid #444;"/>
           <button onclick="connectAndSubscribe()" style="padding:10px 20px; background:#0066cc; color:white; border:none; border-radius:4px; cursor:pointer; margin:10px 0;">Save & Refresh</button>
           <button onclick="logout()" style="padding:10px 20px; background:#cc0000; color:white; border:none; border-radius:4px; cursor:pointer;">Disconnect</button>
         </div>
       </div>
 
       <div class="pane center-pane" id="feed">
-        <p style="color:#666; text-align:center; margin-top:100px;">Feed loading from relays...</p>
+        <p style="color:#666; text-align:center; margin-top:100px;">Feed loading from relay...</p>
       </div>
 
       <div class="pane right-pane">
