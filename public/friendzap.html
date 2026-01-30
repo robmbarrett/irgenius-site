@@ -4,7 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Friendzap - Nostr Client</title>
-  <script src="https://unpkg.com/nostr-tools@2.21.0/lib/nostr.bundle.js"></script>
+  <!-- Stable version before 2.21.0 regression -->
+  <script src="https://unpkg.com/nostr-tools@2.19.4/lib/nostr.bundle.js"></script>
   <style>
     body { margin:0; font-family:sans-serif; background:#0f0f0f; color:#e0e0e0; height:100vh; overflow:hidden; }
     #header { background:#1a1a1a; padding:12px; text-align:center; font-size:28px; font-weight:bold; border-bottom:1px solid #333; }
@@ -35,10 +36,9 @@
     let sub = null;
     let userPubkey = null;
 
-    // Confirm bundle loaded
     setTimeout(() => {
       if (window.NostrTools && window.NostrTools.SimplePool) {
-        console.log('Success: window.NostrTools loaded from bundle');
+        console.log('Success: window.NostrTools loaded');
       } else {
         console.error('Failure: window.NostrTools missing');
       }
@@ -49,7 +49,7 @@
         const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
         const data = await res.json();
         document.getElementById('btc-price').textContent = `$${data.bitcoin.usd.toLocaleString('en-US', {minimumFractionDigits: 0})}`;
-      } catch (e) { console.warn('Price fetch failed', e); }
+      } catch {}
     }
 
     function set200WMA() {
@@ -62,9 +62,7 @@
       const relays = [];
       if (r1 && r1.startsWith('wss://')) relays.push(r1);
       if (r2 && r2.startsWith('wss://')) relays.push(r2);
-      if (relays.length === 0) {
-        relays.push('wss://relay.damus.io', 'wss://nos.lol');
-      }
+      if (relays.length === 0) relays.push('wss://relay.damus.io', 'wss://nos.lol');
       return relays;
     }
 
@@ -73,41 +71,23 @@
       console.log('Trying relays:', relays);
 
       if (pool) {
-        try {
-          pool.close();
-        } catch (e) {
-          console.warn('Previous pool close failed (safe to ignore)', e);
-        }
+        try { pool.close(); } catch (e) { console.warn('Pool close warning:', e); }
       }
       if (sub) {
-        try {
-          sub.unsub();
-        } catch (e) {}
+        try { sub.unsub(); } catch (e) {}
       }
 
       if (!window.NostrTools || !window.NostrTools.SimplePool) {
-        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Nostr library not loaded</p>';
+        document.getElementById('feed').innerHTML = '<p style="color:red;">Nostr library not loaded</p>';
         return;
       }
 
-      try {
-        pool = new window.NostrTools.SimplePool();
-      } catch (e) {
-        console.error('Pool creation failed:', e);
-        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Pool creation error: ' + e.message + '</p>';
-        return;
-      }
+      pool = new window.NostrTools.SimplePool();
 
       const since = Math.floor(Date.now() / 1000) - 86400 * 7;
       const filters = [{ kinds: [1], since }];
 
-      try {
-        sub = pool.subscribeMany(relays, filters);
-      } catch (e) {
-        console.error('subscribeMany failed:', e);
-        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Subscription error: ' + e.message + '</p>';
-        return;
-      }
+      sub = pool.subscribeMany(relays, filters);
 
       sub.on('event', event => {
         console.log('Event received:', event.id.slice(0, 8));
@@ -115,13 +95,13 @@
       });
 
       sub.on('eose', () => {
-        console.log('EOSE received – end of stored events');
+        console.log('EOSE received');
         if (document.querySelectorAll('.note').length === 0) {
-          document.getElementById('feed').innerHTML += '<p style="color:#ff9800; text-align:center;">No recent notes found yet (try more relays or wait longer)</p>';
+          document.getElementById('feed').innerHTML += '<p style="color:#ff9800; text-align:center;">No recent notes found (try longer time or more relays)</p>';
         }
       });
 
-      document.getElementById('feed').innerHTML = '<p style="color:#4caf50; text-align:center;">Connected – fetching recent notes (wait 10–60s)...</p>';
+      document.getElementById('feed').innerHTML = '<p style="color:#4caf50; text-align:center;">Connected – fetching notes (10–60 seconds)...</p>';
     }
 
     function renderNote(event) {
@@ -141,7 +121,7 @@
 
     async function tryLogin() {
       if (!window.nostr) {
-        alert('No Alby/NIP-07 extension detected.');
+        alert('No Alby extension detected.');
         return;
       }
       try {
@@ -170,9 +150,7 @@
       document.getElementById('header').textContent = 'Friendzap';
       document.getElementById('login-screen').classList.remove('hidden');
       document.getElementById('main-content').classList.add('hidden');
-      if (pool) {
-        try { pool.close(); } catch {}
-      }
+      if (pool) try { pool.close(); } catch {}
     }
 
     function showSection(id) {
@@ -195,10 +173,10 @@
 
   <div id="login-screen">
     <h1>Friendzap</h1>
-    <p>Connect with Alby or browse anonymously (public notes only).</p>
+    <p>Connect with Alby or browse anonymously.</p>
     <button class="login-btn" onclick="tryLogin()">Connect with Alby</button>
     <button class="anon-btn" onclick="continueAnonymous()">Continue Anonymously</button>
-    <p style="font-size:14px; color:#aaa;">Notes may take 10–60 seconds to appear.</p>
+    <p style="font-size:14px; color:#aaa;">Notes appear in 10–60 seconds.</p>
   </div>
 
   <div id="main-content" class="hidden">
@@ -210,7 +188,7 @@
         <div class="nav-item" onclick="showSection('settings')">Settings</div>
 
         <div id="home" class="section active">
-          <p style="color:#888;">Your feed is loading...</p>
+          <p style="color:#888;">Feed loading...</p>
           <button class="retry" onclick="connectAndSubscribe()">Retry / Refresh Feed</button>
         </div>
 
