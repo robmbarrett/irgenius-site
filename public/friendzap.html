@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Friendzap - Nostr Client</title>
-  <!-- Stable version before 2.21.0 regression -->
+  <!-- Stable version – avoids v2.21.0 internal EOSE bug -->
   <script src="https://unpkg.com/nostr-tools@2.19.4/lib/nostr.bundle.js"></script>
   <style>
     body { margin:0; font-family:sans-serif; background:#0f0f0f; color:#e0e0e0; height:100vh; overflow:hidden; }
@@ -36,11 +36,12 @@
     let sub = null;
     let userPubkey = null;
 
+    // Confirm library ready
     setTimeout(() => {
       if (window.NostrTools && window.NostrTools.SimplePool) {
-        console.log('Success: window.NostrTools loaded');
+        console.log('Success: NostrTools loaded (v2.19.4)');
       } else {
-        console.error('Failure: window.NostrTools missing');
+        console.error('NostrTools failed to load');
       }
     }, 1500);
 
@@ -95,13 +96,13 @@
       });
 
       sub.on('eose', () => {
-        console.log('EOSE received');
+        console.log('EOSE received – end of stored events');
         if (document.querySelectorAll('.note').length === 0) {
-          document.getElementById('feed').innerHTML += '<p style="color:#ff9800; text-align:center;">No recent notes found (try longer time or more relays)</p>';
+          document.getElementById('feed').innerHTML += '<p style="color:#ff9800; text-align:center;">No recent notes found (try longer time window or add relays)</p>';
         }
       });
 
-      document.getElementById('feed').innerHTML = '<p style="color:#4caf50; text-align:center;">Connected – fetching notes (10–60 seconds)...</p>';
+      document.getElementById('feed').innerHTML = '<p style="color:#4caf50; text-align:center;">Connected – fetching notes (wait 10–60s)...</p>';
     }
 
     function renderNote(event) {
@@ -121,7 +122,7 @@
 
     async function tryLogin() {
       if (!window.nostr) {
-        alert('No Alby extension detected.');
+        alert('No Alby/NIP-07 extension detected.');
         return;
       }
       try {
@@ -173,10 +174,10 @@
 
   <div id="login-screen">
     <h1>Friendzap</h1>
-    <p>Connect with Alby or browse anonymously.</p>
+    <p>Connect with Alby or browse anonymously (public notes).</p>
     <button class="login-btn" onclick="tryLogin()">Connect with Alby</button>
     <button class="anon-btn" onclick="continueAnonymous()">Continue Anonymously</button>
-    <p style="font-size:14px; color:#aaa;">Notes appear in 10–60 seconds.</p>
+    <p style="font-size:14px; color:#aaa;">Wait 10–60 seconds for notes to appear.</p>
   </div>
 
   <div id="main-content" class="hidden">
