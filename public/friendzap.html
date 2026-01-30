@@ -52,7 +52,7 @@
       if (!url || !url.startsWith('wss://')) {
         url = 'wss://relay.damus.io';
       }
-      console.log('Connecting to relay:', url);
+      console.log('Using relay:', url);
       return url;
     }
 
@@ -66,12 +66,12 @@
       ws = new WebSocket(url);
 
       ws.onopen = () => {
-        console.log('WebSocket open');
-        document.getElementById('feed').innerHTML = '<p style="color:#4caf50; text-align:center;">Connected to relay – requesting notes...</p>';
+        console.log('WebSocket open to', url);
+        document.getElementById('feed').innerHTML = '<p style="color:#4caf50; text-align:center;">Connected – requesting recent notes...</p>';
 
-        subscriptionId = 'sub-' + Math.random().toString(36).substring(2);
+        subscriptionId = 'sub-' + Math.random().toString(36).substring(2, 12);
 
-        const since = Math.floor(Date.now() / 1000) - 86400 * 30;
+        const since = Math.floor(Date.now() / 1000) - 86400 * 30; // 30 days
         const req = [
           "REQ",
           subscriptionId,
@@ -83,33 +83,33 @@
         ];
 
         ws.send(JSON.stringify(req));
-        console.log('Sent REQ message');
+        console.log('Sent REQ:', req);
       };
 
       ws.onmessage = (msgEvent) => {
         const msg = JSON.parse(msgEvent.data);
-        console.log('Received from relay:', msg);
+        console.log('Received:', msg);
 
         if (msg[0] === 'EVENT' && msg[2] && msg[2].kind === 1) {
           renderNote(msg[2]);
         } else if (msg[0] === 'EOSE' && msg[1] === subscriptionId) {
-          console.log('EOSE received - end of stored events');
+          console.log('EOSE received');
           if (document.querySelectorAll('.note').length === 0) {
-            document.getElementById('feed').innerHTML += '<p style="color:#ff9800; text-align:center;">No recent notes found on this relay</p>';
+            document.getElementById('feed').innerHTML += '<p style="color:#ff9800; text-align:center;">No recent notes on this relay (try your own relay or adjust time)</p>';
           }
         } else if (msg[0] === 'NOTICE') {
           console.warn('Relay notice:', msg[1]);
-          document.getElementById('feed').innerHTML += '<p style="color:#ff9800;">Notice from relay: ' + msg[1] + '</p>';
+          document.getElementById('feed').innerHTML += '<p style="color:#ff9800;">Relay notice: ' + msg[1] + '</p>';
         }
       };
 
       ws.onerror = (err) => {
-        console.error('WebSocket error:', err);
+        console.error('WS error:', err);
         document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Connection failed – check relay URL or network</p>';
       };
 
       ws.onclose = () => {
-        console.log('WebSocket closed');
+        console.log('WS closed');
         document.getElementById('feed').innerHTML += '<p style="color:#888; text-align:center;">Connection closed</p>';
       };
     }
@@ -183,10 +183,10 @@
 
   <div id="login-screen">
     <h1>Friendzap</h1>
-    <p>Connect with Alby or browse anonymously.</p>
+    <p>Connect with Alby or browse anonymously (public notes).</p>
     <button class="login-btn" onclick="tryLogin()">Connect with Alby</button>
     <button class="anon-btn" onclick="continueAnonymous()">Continue Anonymously</button>
-    <p style="font-size:14px; color:#aaa;">Wait 10–60 seconds for notes to load.</p>
+    <p style="font-size:14px; color:#aaa;">Wait 10–60 seconds for notes to appear.</p>
   </div>
 
   <div id="main-content" class="hidden">
