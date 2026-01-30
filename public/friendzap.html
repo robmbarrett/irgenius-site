@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Friendzap - Nostr Client</title>
-  <!-- Browser bundle – reliable, no MIME/dependency issues -->
-  <script src="https://unpkg.com/nostr-tools@2.21.0/lib/nostr.bundle.js"></script>
+  <!-- Stable bundle from jsDelivr -->
+  <script src="https://cdn.jsdelivr.net/npm/nostr-tools@2.21.0/lib/nostr.bundle.js"></script>
   <style>
     body { margin:0; font-family:sans-serif; background:#0f0f0f; color:#e0e0e0; height:100vh; overflow:hidden; }
     #header { background:#1a1a1a; padding:12px; text-align:center; font-size:28px; font-weight:bold; border-bottom:1px solid #333; }
@@ -27,10 +27,21 @@
     #main-content.hidden { display:none; }
     .login-btn { padding:16px 32px; font-size:20px; background:#0066cc; border:none; color:white; border-radius:8px; cursor:pointer; margin:20px 0; }
     .login-btn:hover { background:#0055aa; }
+    .anon-btn { padding:12px 24px; background:#444; border:none; color:white; border-radius:6px; cursor:pointer; margin:10px; }
     #user-info { font-size:16px; color:#4caf50; margin:10px 0; }
     button.retry { margin:20px auto; display:block; padding:12px 24px; background:#0066cc; color:white; border:none; border-radius:6px; cursor:pointer; }
   </style>
   <script>
+    // Debug: Check if bundle loaded
+    window.addEventListener('load', () => {
+      if (!window.nostrTools || !window.nostrTools.RelayPool) {
+        console.error('nostr-tools bundle failed to load from jsDelivr');
+        alert('Nostr library load failed – check console/network tab for CDN errors. Try refresh or different browser.');
+      } else {
+        console.log('nostr-tools bundle loaded OK');
+      }
+    });
+
     let relayPool = null;
     let sub = null;
     let userPubkey = null;
@@ -40,7 +51,7 @@
         const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
         const data = await res.json();
         document.getElementById('btc-price').textContent = `$${data.bitcoin.usd.toLocaleString('en-US', {minimumFractionDigits: 0})}`;
-      } catch (e) { console.error('Price fetch error:', e); }
+      } catch {}
     }
 
     function set200WMA() {
@@ -60,62 +71,53 @@
       if (relayPool) relayPool.close();
       if (sub) sub.unsub();
 
-      if (!window.nostrTools || !window.nostrTools.RelayPool) {
-        console.error('nostrTools bundle not loaded properly');
-        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Nostr library failed to load – check network/console for unpkg errors</p>';
+      if (!window.nostrTools?.RelayPool) {
+        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Nostr library not loaded – reload page or check network</p>';
         return;
       }
 
       try {
         relayPool = new window.nostrTools.RelayPool(relays);
       } catch (e) {
-        console.error('RelayPool failed:', e);
-        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Error initializing: ' + e.message + '</p>';
+        console.error('RelayPool init failed:', e);
+        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Init error: ' + e.message + '</p>';
         return;
       }
 
-      relayPool.on('open', relay => {
-        console.log('Connected to:', relay.url);
-      });
-      relayPool.on('error', (relay, err) => {
-        console.error('Relay error:', relay?.url, err);
-      });
+      relayPool.on('open', relay => console.log('Connected:', relay.url));
+      relayPool.on('error', (_, err) => console.error('Relay error:', err));
 
       relayPool.connect();
 
-      const since = Math.floor(Date.now() / 1000) - (86400 * 7);
+      const since = Math.floor(Date.now() / 1000) - 86400 * 7;
       sub = relayPool.sub([{ kinds: [1], since }]);
 
       sub.on('event', event => {
-        console.log('Event received:', event.id.slice(0,8));
+        console.log('Event:', event.id.slice(0,8));
         renderNote(event);
       });
 
-      document.getElementById('feed').innerHTML = '<p style="color:#4caf50; text-align:center;">Connected – fetching notes...</p>';
+      document.getElementById('feed').innerHTML = '<p style="color:#4caf50; text-align:center;">Fetching notes...</p>';
     }
 
     function renderNote(event) {
       const feed = document.getElementById('feed');
       const short = event.pubkey.slice(0,8) + '…' + event.pubkey.slice(-8);
-      const time = new Date(event.created_at * 1000).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' });
+      const time = new Date(event.created_at * 1000).toLocaleString([], {hour:'2-digit', minute:'2-digit', month:'short', day:'numeric'});
 
       const div = document.createElement('div');
       div.className = 'note';
-      div.innerHTML = `
-        <div class="pubkey">npub1${short}</div>
-        <div class="content">${escapeHtml(event.content)}</div>
-        <div class="time">${time}</div>
-      `;
+      div.innerHTML = `<div class="pubkey">npub1${short}</div><div class="content">${escapeHtml(event.content)}</div><div class="time">${time}</div>`;
       feed.insertBefore(div, feed.firstChild);
     }
 
-    function escapeHtml(unsafe) {
-      return unsafe.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[m]);
+    function escapeHtml(s) {
+      return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#039;'})[c]);
     }
 
     async function tryLogin() {
       if (!window.nostr) {
-        alert('No NIP-07 extension detected (Alby/Nos2x/etc.). Install one and reload.');
+        alert('No Alby/NIP-07 extension – continue anonymously or install one.');
         return;
       }
       try {
@@ -127,8 +129,15 @@
         document.getElementById('main-content').classList.remove('hidden');
         connectAndSubscribe();
       } catch (err) {
-        alert('Login denied/failed: ' + err.message);
+        alert('Denied: ' + err.message);
       }
+    }
+
+    function continueAnonymous() {
+      document.getElementById('login-screen').classList.add('hidden');
+      document.getElementById('main-content').classList.remove('hidden');
+      document.getElementById('header').textContent = 'Friendzap (Anonymous)';
+      connectAndSubscribe();
     }
 
     function logout() {
@@ -138,6 +147,13 @@
       document.getElementById('login-screen').classList.remove('hidden');
       document.getElementById('main-content').classList.add('hidden');
       if (relayPool) relayPool.close();
+    }
+
+    function showSection(id) {
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      Array.from(document.querySelectorAll('.nav-item')).find(n => n.textContent === (id === 'home' ? 'Home' : 'Settings')).classList.add('active');
     }
 
     window.addEventListener('load', () => {
@@ -153,9 +169,10 @@
 
   <div id="login-screen">
     <h1>Friendzap</h1>
-    <p>Connect with your Nostr extension (Alby is working for you!)</p>
-    <button class="login-btn" onclick="tryLogin()">Connect with Nostr Extension</button>
-    <p style="font-size:14px; color:#aaa;">Wait a few seconds if slow – unpkg bundle loads first.</p>
+    <p>Connect with Alby (Nostr extension) or continue anonymously.</p>
+    <button class="login-btn" onclick="tryLogin()">Connect with Alby</button>
+    <button class="anon-btn" onclick="continueAnonymous()">Continue Anonymously</button>
+    <p style="font-size:14px; color:#aaa;">If stuck, check console (F12) for network errors on jsDelivr.</p>
   </div>
 
   <div id="main-content" class="hidden">
@@ -167,15 +184,15 @@
         <div class="nav-item" onclick="showSection('settings')">Settings</div>
 
         <div id="home" class="section active">
-          <p style="color:#888;">Feed loading from relays...</p>
-          <button class="retry" onclick="connectAndSubscribe()">Retry / Refresh Feed</button>
+          <p style="color:#888;">Feed loading...</p>
+          <button class="retry" onclick="connectAndSubscribe()">Retry Feed</button>
         </div>
 
         <div id="settings" class="section">
           <h3>Network Settings</h3>
           <label>Relay 1:</label>
           <input type="text" id="relay1" value="wss://relay.damus.io" style="width:100%; padding:8px; margin:8px 0; background:#222; color:white; border:1px solid #444;"/>
-          <label>Relay 2 (optional):</label>
+          <label>Relay 2:</label>
           <input type="text" id="relay2" value="wss://nos.lol" style="width:100%; padding:8px; margin:8px 0; background:#222; color:white; border:1px solid #444;"/>
           <button onclick="connectAndSubscribe()" style="padding:10px 20px; background:#0066cc; color:white; border:none; border-radius:4px; cursor:pointer; margin:10px 0;">Save & Refresh</button>
           <button onclick="logout()" style="padding:10px 20px; background:#cc0000; color:white; border:none; border-radius:4px; cursor:pointer;">Disconnect</button>
@@ -183,7 +200,7 @@
       </div>
 
       <div class="pane center-pane" id="feed">
-        <p style="color:#666; text-align:center; margin-top:100px;">Feed will load after connection...</p>
+        <p style="color:#666; text-align:center; margin-top:100px;">Feed loading...</p>
       </div>
 
       <div class="pane right-pane">
@@ -198,15 +215,6 @@
       </div>
     </div>
   </div>
-
-  <script>
-    function showSection(id) {
-      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-      document.getElementById(id).classList.add('active');
-      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-      event.target.classList.add('active');
-    }
-  </script>
 
 </body>
 </html>
