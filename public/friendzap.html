@@ -29,11 +29,15 @@
     #user-info { font-size:16px; color:#4caf50; margin:10px 0; }
     button.retry { margin:20px auto; display:block; padding:12px 24px; background:#0066cc; color:white; border:none; border-radius:6px; cursor:pointer; }
     input[type="text"] { width:100%; padding:8px; margin:8px 0; background:#222; color:white; border:1px solid #444; }
+    #follows-info { margin-top:20px; font-size:14px; color:#aaa; }
+    #follows-list { margin-top:10px; font-size:13px; color:#ccc; }
   </style>
   <script>
     let ws = null;
     let userPubkey = null;
     let subscriptionId = null;
+    let followsCount = 0;
+    let followsList = [];
 
     async function fetchBitcoinPrice() {
       try {
@@ -47,8 +51,23 @@
       document.getElementById('btc-200wma').textContent = '~$57849';
     }
 
+    function loadSavedRelay() {
+      const saved = localStorage.getItem('friendzap-relay');
+      if (saved) {
+        document.getElementById('relay').value = saved;
+      }
+    }
+
+    function saveRelay() {
+      const url = document.getElementById('relay').value.trim();
+      if (url && url.startsWith('wss://')) {
+        localStorage.setItem('friendzap-relay', url);
+        console.log('Relay saved to localStorage:', url);
+      }
+    }
+
     function getRelayUrl() {
-      let url = document.getElementById('relay')?.value.trim();
+      let url = document.getElementById('relay').value.trim();
       if (!url || !url.startsWith('wss://')) {
         url = 'wss://relay.damus.io';
       }
@@ -57,6 +76,8 @@
     }
 
     function connectAndSubscribe() {
+      saveRelay(); // Save on every refresh attempt
+
       const url = getRelayUrl();
 
       if (ws) {
@@ -71,7 +92,7 @@
 
         subscriptionId = 'sub-' + Math.random().toString(36).substring(2, 12);
 
-        const since = Math.floor(Date.now() / 1000) - 86400 * 30; // 30 days
+        const since = Math.floor(Date.now() / 1000) - 86400 * 30;
         const req = [
           "REQ",
           subscriptionId,
@@ -84,18 +105,49 @@
 
         ws.send(JSON.stringify(req));
         console.log('Sent REQ:', req);
+
+        // Also request kind 3 (contacts) if logged in
+        if (userPubkey) {
+          const contactsReq = [
+            "REQ",
+            "contacts-" + subscriptionId,
+            {
+              kinds: [3],
+              authors: [userPubkey]
+            }
+          ];
+          ws.send(JSON.stringify(contactsReq));
+          console.log('Sent contacts REQ for your pubkey');
+        }
       };
 
       ws.onmessage = (msgEvent) => {
         const msg = JSON.parse(msgEvent.data);
         console.log('Received:', msg);
 
-        if (msg[0] === 'EVENT' && msg[2] && msg[2].kind === 1) {
-          renderNote(msg[2]);
-        } else if (msg[0] === 'EOSE' && msg[1] === subscriptionId) {
-          console.log('EOSE received');
+        if (msg[0] === 'EVENT') {
+          const event = msg[2];
+          if (event.kind === 1) {
+            renderNote(event);
+          } else if (event.kind === 3 && event.pubkey === userPubkey) {
+            // Handle your follows
+            try {
+              followsList = event.tags
+                .filter(tag => tag[0] === 'p')
+                .map(tag => tag[1]);
+              followsCount = followsList.length;
+              document.getElementById('follows-info').textContent = `You follow ${followsCount} people`;
+              const listEl = document.getElementById('follows-list');
+              listEl.innerHTML = followsList.slice(0, 10).map(p => `<div>npub1${p.slice(0,8)}…</div>`).join('');
+              console.log('Follows loaded:', followsCount);
+            } catch (e) {
+              console.error('Error parsing follows:', e);
+            }
+          }
+        } else if (msg[0] === 'EOSE' && msg[1].startsWith(subscriptionId)) {
+          console.log('EOSE received for sub', msg[1]);
           if (document.querySelectorAll('.note').length === 0) {
-            document.getElementById('feed').innerHTML += '<p style="color:#ff9800; text-align:center;">No recent notes on this relay (try your own relay or adjust time)</p>';
+            document.getElementById('feed').innerHTML += '<p style="color:#ff9800; text-align:center;">No recent notes found on this relay</p>';
           }
         } else if (msg[0] === 'NOTICE') {
           console.warn('Relay notice:', msg[1]);
@@ -105,12 +157,11 @@
 
       ws.onerror = (err) => {
         console.error('WS error:', err);
-        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Connection failed – check relay URL or network</p>';
+        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Connection failed – check relay URL</p>';
       };
 
       ws.onclose = () => {
         console.log('WS closed');
-        document.getElementById('feed').innerHTML += '<p style="color:#888; text-align:center;">Connection closed</p>';
       };
     }
 
@@ -156,7 +207,11 @@
 
     function logout() {
       userPubkey = null;
+      followsCount = 0;
+      followsList = [];
       document.getElementById('user-info').textContent = '';
+      document.getElementById('follows-info').textContent = '';
+      document.getElementById('follows-list').innerHTML = '';
       document.getElementById('header').textContent = 'Friendzap';
       document.getElementById('login-screen').classList.remove('hidden');
       document.getElementById('main-content').classList.add('hidden');
@@ -171,6 +226,7 @@
     }
 
     window.addEventListener('load', () => {
+      loadSavedRelay(); // Load persisted relay
       fetchBitcoinPrice();
       set200WMA();
       setInterval(fetchBitcoinPrice, 60000);
@@ -183,10 +239,10 @@
 
   <div id="login-screen">
     <h1>Friendzap</h1>
-    <p>Connect with Alby or browse anonymously (public notes).</p>
+    <p>Connect with Alby or browse anonymously.</p>
     <button class="login-btn" onclick="tryLogin()">Connect with Alby</button>
     <button class="anon-btn" onclick="continueAnonymous()">Continue Anonymously</button>
-    <p style="font-size:14px; color:#aaa;">Wait 10–60 seconds for notes to appear.</p>
+    <p style="font-size:14px; color:#aaa;">Wait 10–60 seconds for notes. Relay URL is saved automatically.</p>
   </div>
 
   <div id="main-content" class="hidden">
@@ -194,6 +250,8 @@
     <div class="container">
       <div class="pane left-pane">
         <div id="user-info"></div>
+        <div id="follows-info"></div>
+        <div id="follows-list"></div>
         <div class="nav-item active" onclick="showSection('home')">Home</div>
         <div class="nav-item" onclick="showSection('settings')">Settings</div>
 
