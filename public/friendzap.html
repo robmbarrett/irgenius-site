@@ -56,12 +56,13 @@
     }
 
     function getRelays() {
-      const r1 = document.getElementById('relay1')?.value.trim();
-      const r2 = document.getElementById('relay2')?.value.trim();
+      const r1 = (document.getElementById('relay1')?.value || '').trim();
+      const r2 = (document.getElementById('relay2')?.value || '').trim();
       const relays = [];
-      if (r1 && r1.startsWith('wss://')) relays.push(r1);
-      if (r2 && r2.startsWith('wss://')) relays.push(r2);
+      if (r1.startsWith('wss://')) relays.push(r1);
+      if (r2.startsWith('wss://')) relays.push(r2);
       if (relays.length === 0) relays.push('wss://relay.damus.io', 'wss://nos.lol');
+      console.log('Parsed relays array:', relays); // Debug
       return relays;
     }
 
@@ -83,11 +84,12 @@
 
       pool = new window.NostrTools.SimplePool();
 
-      const since = Math.floor(Date.now() / 1000) - 86400 * 30; // 30 days to ensure some content
+      const since = Math.floor(Date.now() / 1000) - 86400 * 30;
       const filters = [{ kinds: [1], since }];
 
       try {
-        sub = pool.subscribe(filters, relays); // Correct order: filters first, relays second
+        sub = pool.subscribe(filters, relays); // filters first, relays second
+        console.log('Subscription created successfully');
       } catch (e) {
         console.error('Subscription failed:', e);
         document.getElementById('feed').innerHTML = '<p style="color:red;">Subscription error: ' + e.message + '</p>';
@@ -102,11 +104,11 @@
       sub.on('eose', () => {
         console.log('EOSE received');
         if (document.querySelectorAll('.note').length === 0) {
-          document.getElementById('feed').innerHTML += '<p style="color:#ff9800; text-align:center;">No notes in last 30 days (add relays or check relay status)</p>';
+          document.getElementById('feed').innerHTML += '<p style="color:#ff9800; text-align:center;">No notes found in last 30 days – check relays or increase time</p>';
         }
       });
 
-      document.getElementById('feed').innerHTML = '<p style="color:#4caf50; text-align:center;">Connected – fetching notes (wait 10–60s)...</p>';
+      document.getElementById('feed').innerHTML = '<p style="color:#4caf50; text-align:center;">Connected – fetching notes (wait 10–90s)...</p>';
     }
 
     function renderNote(event) {
@@ -178,10 +180,10 @@
 
   <div id="login-screen">
     <h1>Friendzap</h1>
-    <p>Connect with Alby or browse anonymously (public notes).</p>
+    <p>Connect with Alby or browse anonymously.</p>
     <button class="login-btn" onclick="tryLogin()">Connect with Alby</button>
     <button class="anon-btn" onclick="continueAnonymous()">Continue Anonymously</button>
-    <p style="font-size:14px; color:#aaa;">Wait 10–60 seconds for notes to appear.</p>
+    <p style="font-size:14px; color:#aaa;">Wait 10–90 seconds for notes to appear. Check console for progress.</p>
   </div>
 
   <div id="main-content" class="hidden">
