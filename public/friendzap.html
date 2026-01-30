@@ -4,9 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Friendzap - Nostr Client</title>
-  <!-- Stable bundle from jsDelivr -->
+  <!-- Try jsDelivr first; fallback to unpkg if needed -->
   <script src="https://cdn.jsdelivr.net/npm/nostr-tools@2.21.0/lib/nostr.bundle.js"></script>
+  <!-- Alternative: <script src="https://unpkg.com/nostr-tools@2.21.0/lib/nostr.bundle.js"></script> -->
   <style>
+    /* styles unchanged from previous – keep your existing CSS */
     body { margin:0; font-family:sans-serif; background:#0f0f0f; color:#e0e0e0; height:100vh; overflow:hidden; }
     #header { background:#1a1a1a; padding:12px; text-align:center; font-size:28px; font-weight:bold; border-bottom:1px solid #333; }
     .container { display:flex; height:calc(100vh - 60px); }
@@ -32,19 +34,24 @@
     button.retry { margin:20px auto; display:block; padding:12px 24px; background:#0066cc; color:white; border:none; border-radius:6px; cursor:pointer; }
   </style>
   <script>
-    // Debug: Check if bundle loaded
-    window.addEventListener('load', () => {
-      if (!window.nostrTools || !window.nostrTools.RelayPool) {
-        console.error('nostr-tools bundle failed to load from jsDelivr');
-        alert('Nostr library load failed – check console/network tab for CDN errors. Try refresh or different browser.');
-      } else {
-        console.log('nostr-tools bundle loaded OK');
-      }
-    });
-
     let relayPool = null;
     let sub = null;
     let userPubkey = null;
+
+    // Bundle load debug
+    window.addEventListener('load', () => {
+      if (window.NostrTools && window.NostrTools.RelayPool) {
+        console.log('NostrTools bundle loaded successfully (global: NostrTools)');
+      } else {
+        console.error('NostrTools bundle FAILED to load or expose global');
+        alert('Library load failed – check Network tab (F12) for the .bundle.js request status. Try refresh or switch CDN in code.');
+      }
+      fetchBitcoinPrice();
+      set200WMA();
+      setInterval(fetchBitcoinPrice, 60000);
+      document.getElementById('login-screen').classList.remove('hidden');
+      document.getElementById('main-content').classList.add('hidden');
+    });
 
     async function fetchBitcoinPrice() {
       try {
@@ -71,21 +78,21 @@
       if (relayPool) relayPool.close();
       if (sub) sub.unsub();
 
-      if (!window.nostrTools?.RelayPool) {
-        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Nostr library not loaded – reload page or check network</p>';
+      if (!window.NostrTools || !window.NostrTools.RelayPool) {
+        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Nostr library not loaded – reload or check CDN</p>';
         return;
       }
 
       try {
-        relayPool = new window.nostrTools.RelayPool(relays);
+        relayPool = new window.NostrTools.RelayPool(relays);
       } catch (e) {
-        console.error('RelayPool init failed:', e);
-        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Init error: ' + e.message + '</p>';
+        console.error('RelayPool failed:', e);
+        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Error: ' + e.message + '</p>';
         return;
       }
 
       relayPool.on('open', relay => console.log('Connected:', relay.url));
-      relayPool.on('error', (_, err) => console.error('Relay error:', err));
+      relayPool.on('error', (relay, err) => console.error('Relay error:', relay?.url, err));
 
       relayPool.connect();
 
@@ -97,7 +104,7 @@
         renderNote(event);
       });
 
-      document.getElementById('feed').innerHTML = '<p style="color:#4caf50; text-align:center;">Fetching notes...</p>';
+      document.getElementById('feed').innerHTML = '<p style="color:#4caf50; text-align:center;">Fetching notes (wait 10-30s)...</p>';
     }
 
     function renderNote(event) {
@@ -117,7 +124,7 @@
 
     async function tryLogin() {
       if (!window.nostr) {
-        alert('No Alby/NIP-07 extension – continue anonymously or install one.');
+        alert('No extension – try anonymously.');
         return;
       }
       try {
@@ -129,7 +136,7 @@
         document.getElementById('main-content').classList.remove('hidden');
         connectAndSubscribe();
       } catch (err) {
-        alert('Denied: ' + err.message);
+        alert('Failed: ' + err.message);
       }
     }
 
@@ -155,24 +162,16 @@
       document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
       Array.from(document.querySelectorAll('.nav-item')).find(n => n.textContent === (id === 'home' ? 'Home' : 'Settings')).classList.add('active');
     }
-
-    window.addEventListener('load', () => {
-      fetchBitcoinPrice();
-      set200WMA();
-      setInterval(fetchBitcoinPrice, 60000);
-      document.getElementById('login-screen').classList.remove('hidden');
-      document.getElementById('main-content').classList.add('hidden');
-    });
   </script>
 </head>
 <body>
 
   <div id="login-screen">
     <h1>Friendzap</h1>
-    <p>Connect with Alby (Nostr extension) or continue anonymously.</p>
+    <p>Connect with Alby or go anonymous for testing.</p>
     <button class="login-btn" onclick="tryLogin()">Connect with Alby</button>
     <button class="anon-btn" onclick="continueAnonymous()">Continue Anonymously</button>
-    <p style="font-size:14px; color:#aaa;">If stuck, check console (F12) for network errors on jsDelivr.</p>
+    <p style="font-size:14px; color:#aaa;">Reload if library load fails (check F12 Network tab for .bundle.js status 200).</p>
   </div>
 
   <div id="main-content" class="hidden">
@@ -190,10 +189,8 @@
 
         <div id="settings" class="section">
           <h3>Network Settings</h3>
-          <label>Relay 1:</label>
-          <input type="text" id="relay1" value="wss://relay.damus.io" style="width:100%; padding:8px; margin:8px 0; background:#222; color:white; border:1px solid #444;"/>
-          <label>Relay 2:</label>
-          <input type="text" id="relay2" value="wss://nos.lol" style="width:100%; padding:8px; margin:8px 0; background:#222; color:white; border:1px solid #444;"/>
+          <label>Relay 1:</label><input type="text" id="relay1" value="wss://relay.damus.io" style="width:100%; padding:8px; margin:8px 0; background:#222; color:white; border:1px solid #444;"/>
+          <label>Relay 2:</label><input type="text" id="relay2" value="wss://nos.lol" style="width:100%; padding:8px; margin:8px 0; background:#222; color:white; border:1px solid #444;"/>
           <button onclick="connectAndSubscribe()" style="padding:10px 20px; background:#0066cc; color:white; border:none; border-radius:4px; cursor:pointer; margin:10px 0;">Save & Refresh</button>
           <button onclick="logout()" style="padding:10px 20px; background:#cc0000; color:white; border:none; border-radius:4px; cursor:pointer;">Disconnect</button>
         </div>
