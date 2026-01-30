@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Friendzap - Nostr Client</title>
-  <!-- Use unpkg – official example CDN -->
   <script src="https://unpkg.com/nostr-tools@2.21.0/lib/nostr.bundle.js"></script>
   <style>
     body { margin:0; font-family:sans-serif; background:#0f0f0f; color:#e0e0e0; height:100vh; overflow:hidden; }
@@ -25,9 +24,9 @@
     #login-screen { position:fixed; inset:0; background:rgba(0,0,0,0.9); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:1000; text-align:center; padding:20px; }
     #login-screen.hidden { display:none; }
     #main-content.hidden { display:none; }
-    .login-btn { padding:16px 32px; font-size:20px; background:#0066cc; border:none; color:white; border-radius:8px; cursor:pointer; margin:20px 0; }
-    .login-btn:hover { background:#0055aa; }
-    .anon-btn { padding:12px 24px; background:#444; border:none; color:white; border-radius:6px; cursor:pointer; margin:10px; }
+    .login-btn, .anon-btn { padding:12px 24px; font-size:18px; margin:10px; border:none; border-radius:6px; cursor:pointer; }
+    .login-btn { background:#0066cc; color:white; }
+    .anon-btn { background:#444; color:white; }
     #user-info { font-size:16px; color:#4caf50; margin:10px 0; }
     button.retry { margin:20px auto; display:block; padding:12px 24px; background:#0066cc; color:white; border:none; border-radius:6px; cursor:pointer; }
   </style>
@@ -36,15 +35,15 @@
     let sub = null;
     let userPubkey = null;
 
-    // Bundle check with delay (scripts load async)
+    // Delay check for bundle load
     setTimeout(() => {
       if (window.NostrTools && window.NostrTools.SimplePool) {
-        console.log('NostrTools loaded OK – global: window.NostrTools');
+        console.log('Success: window.NostrTools loaded from bundle');
       } else {
-        console.error('NostrTools NOT loaded – check Network tab for unpkg nostr.bundle.js (should be 200 OK)');
-        alert('Library failed to load – see console/F12 Network for the script request. Try different browser or VPN if blocked.');
+        console.error('Failure: window.NostrTools missing – bundle load issue');
+        document.getElementById('feed') && (document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Library load failed – reload or check Network tab for nostr.bundle.js (200 OK?)</p>');
       }
-    }, 1500); // Give script time to execute
+    }, 2000);
 
     async function fetchBitcoinPrice() {
       try {
@@ -59,10 +58,9 @@
     }
 
     function getRelays() {
-      return [
-        document.getElementById('relay1')?.value.trim() || 'wss://relay.damus.io',
-        document.getElementById('relay2')?.value.trim() || 'wss://nos.lol'
-      ].filter(Boolean);
+      const r1 = document.getElementById('relay1')?.value.trim() || 'wss://relay.damus.io';
+      const r2 = document.getElementById('relay2')?.value.trim() || 'wss://nos.lol';
+      return [r1, r2].filter(Boolean);
     }
 
     function connectAndSubscribe() {
@@ -73,27 +71,18 @@
       if (sub) sub.unsub();
 
       if (!window.NostrTools || !window.NostrTools.SimplePool) {
-        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Nostr library not ready – reload page</p>';
+        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Library not loaded – reload page</p>';
         return;
       }
 
-      try {
-        pool = new window.NostrTools.SimplePool();
-      } catch (e) {
-        console.error('SimplePool failed:', e);
-        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Error: ' + e.message + '</p>';
-        return;
-      }
+      pool = new window.NostrTools.SimplePool();
 
       const since = Math.floor(Date.now() / 1000) - 86400 * 7;
       sub = pool.sub(relays, [{ kinds: [1], since }]);
 
-      sub.on('event', event => {
-        console.log('Event received');
-        renderNote(event);
-      });
+      sub.on('event', event => renderNote(event));
 
-      document.getElementById('feed').innerHTML = '<p style="color:#4caf50; text-align:center;">Connecting & fetching notes...</p>';
+      document.getElementById('feed').innerHTML = '<p style="color:#4caf50; text-align:center;">Fetching notes...</p>';
     }
 
     function renderNote(event) {
@@ -113,7 +102,7 @@
 
     async function tryLogin() {
       if (!window.nostr) {
-        alert('No Alby extension detected – try anonymous mode.');
+        alert('No extension – use anonymous mode.');
         return;
       }
       try {
@@ -125,7 +114,7 @@
         document.getElementById('main-content').classList.remove('hidden');
         connectAndSubscribe();
       } catch (err) {
-        alert('Connection failed: ' + err.message);
+        alert('Failed: ' + err.message);
       }
     }
 
@@ -165,10 +154,10 @@
 
   <div id="login-screen">
     <h1>Friendzap</h1>
-    <p>Connect with Alby or test anonymously (public notes only).</p>
+    <p>Connect with Alby or test anonymously.</p>
     <button class="login-btn" onclick="tryLogin()">Connect with Alby</button>
     <button class="anon-btn" onclick="continueAnonymous()">Continue Anonymously</button>
-    <p style="font-size:14px; color:#aaa;">If no feed/notes: Check F12 Network for nostr.bundle.js (200 OK?) and console logs.</p>
+    <p style="font-size:14px; color:#aaa;">Reload and check F12 Network for nostr.bundle.js (200 OK, JS code visible).</p>
   </div>
 
   <div id="main-content" class="hidden">
@@ -180,8 +169,8 @@
         <div class="nav-item" onclick="showSection('settings')">Settings</div>
 
         <div id="home" class="section active">
-          <p style="color:#888;">Feed loading from relays...</p>
-          <button class="retry" onclick="connectAndSubscribe()">Retry / Refresh Feed</button>
+          <p style="color:#888;">Feed loading...</p>
+          <button class="retry" onclick="connectAndSubscribe()">Retry Feed</button>
         </div>
 
         <div id="settings" class="section">
