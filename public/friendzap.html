@@ -30,7 +30,6 @@
     button.retry { margin:20px auto; display:block; padding:12px 24px; background:#0066cc; color:white; border:none; border-radius:6px; cursor:pointer; }
     input[type="text"] { width:100%; padding:8px; margin:8px 0; background:#222; color:white; border:1px solid #444; }
     #follows-info { margin-top:20px; font-size:14px; color:#aaa; }
-    #follows-list { margin-top:10px; font-size:13px; color:#ccc; max-height:150px; overflow-y:auto; }
   </style>
   <script>
     let ws = null;
@@ -38,7 +37,6 @@
     let subscriptionId = null;
     let contactsSubId = null;
     let followsCount = 0;
-    let followsList = [];
 
     async function fetchBitcoinPrice() {
       try {
@@ -102,7 +100,6 @@
         ws.send(JSON.stringify(notesReq));
         console.log('Sent notes REQ');
 
-        // Request kind 3 if logged in
         if (userPubkey) {
           contactsSubId = 'contacts-' + Math.random().toString(36).substring(2, 12);
           const contactsReq = [
@@ -126,14 +123,12 @@
             renderNote(event);
           } else if (event.kind === 3 && event.pubkey === userPubkey) {
             try {
-              followsList = event.tags
+              const followedPubkeys = event.tags
                 .filter(tag => tag[0] === 'p')
                 .map(tag => tag[1]);
-              followsCount = followsList.length;
+              followsCount = followedPubkeys.length;
               document.getElementById('follows-info').textContent = `You follow ${followsCount} people`;
-              const listEl = document.getElementById('follows-list');
-              listEl.innerHTML = followsList.slice(0, 10).map(p => `<div>npub1${p.slice(0,8)}…</div>`).join('') || '<div>No follows found</div>';
-              console.log('Follows loaded:', followsCount);
+              console.log('Follows count loaded:', followsCount);
             } catch (e) {
               console.error('Error parsing kind 3:', e);
               document.getElementById('follows-info').textContent = 'Error loading follows';
@@ -207,10 +202,8 @@
     function logout() {
       userPubkey = null;
       followsCount = 0;
-      followsList = [];
       document.getElementById('user-info').textContent = '';
       document.getElementById('follows-info').textContent = '';
-      document.getElementById('follows-list').innerHTML = '';
       document.getElementById('header').textContent = 'Friendzap';
       document.getElementById('login-screen').classList.remove('hidden');
       document.getElementById('main-content').classList.add('hidden');
@@ -241,7 +234,7 @@
     <p>Connect with Alby or browse anonymously.</p>
     <button class="login-btn" onclick="tryLogin()">Connect with Alby</button>
     <button class="anon-btn" onclick="continueAnonymous()">Continue Anonymously</button>
-    <p style="font-size:14px; color:#aaa;">Wait 10–60 seconds for notes. Relay saved automatically.</p>
+    <p style="font-size:14px; color:#aaa;">Wait 10–60 seconds for notes. Relay URL saved automatically.</p>
   </div>
 
   <div id="main-content" class="hidden">
@@ -249,8 +242,7 @@
     <div class="container">
       <div class="pane left-pane">
         <div id="user-info"></div>
-        <div id="follows-info">Loading follows...</div>
-        <div id="follows-list"></div>
+        <div id="follows-info"></div>
         <div class="nav-item active" onclick="showSection('home')">Home</div>
         <div class="nav-item" onclick="showSection('settings')">Settings</div>
 
