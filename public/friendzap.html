@@ -4,11 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Friendzap - Nostr Client</title>
-  <!-- Try jsDelivr first; fallback to unpkg if needed -->
-  <script src="https://cdn.jsdelivr.net/npm/nostr-tools@2.21.0/lib/nostr.bundle.js"></script>
-  <!-- Alternative: <script src="https://unpkg.com/nostr-tools@2.21.0/lib/nostr.bundle.js"></script> -->
+  <!-- Use unpkg – official example CDN -->
+  <script src="https://unpkg.com/nostr-tools@2.21.0/lib/nostr.bundle.js"></script>
   <style>
-    /* styles unchanged from previous – keep your existing CSS */
     body { margin:0; font-family:sans-serif; background:#0f0f0f; color:#e0e0e0; height:100vh; overflow:hidden; }
     #header { background:#1a1a1a; padding:12px; text-align:center; font-size:28px; font-weight:bold; border-bottom:1px solid #333; }
     .container { display:flex; height:calc(100vh - 60px); }
@@ -34,24 +32,19 @@
     button.retry { margin:20px auto; display:block; padding:12px 24px; background:#0066cc; color:white; border:none; border-radius:6px; cursor:pointer; }
   </style>
   <script>
-    let relayPool = null;
+    let pool = null;
     let sub = null;
     let userPubkey = null;
 
-    // Bundle load debug
-    window.addEventListener('load', () => {
-      if (window.NostrTools && window.NostrTools.RelayPool) {
-        console.log('NostrTools bundle loaded successfully (global: NostrTools)');
+    // Bundle check with delay (scripts load async)
+    setTimeout(() => {
+      if (window.NostrTools && window.NostrTools.SimplePool) {
+        console.log('NostrTools loaded OK – global: window.NostrTools');
       } else {
-        console.error('NostrTools bundle FAILED to load or expose global');
-        alert('Library load failed – check Network tab (F12) for the .bundle.js request status. Try refresh or switch CDN in code.');
+        console.error('NostrTools NOT loaded – check Network tab for unpkg nostr.bundle.js (should be 200 OK)');
+        alert('Library failed to load – see console/F12 Network for the script request. Try different browser or VPN if blocked.');
       }
-      fetchBitcoinPrice();
-      set200WMA();
-      setInterval(fetchBitcoinPrice, 60000);
-      document.getElementById('login-screen').classList.remove('hidden');
-      document.getElementById('main-content').classList.add('hidden');
-    });
+    }, 1500); // Give script time to execute
 
     async function fetchBitcoinPrice() {
       try {
@@ -66,45 +59,41 @@
     }
 
     function getRelays() {
-      const r1 = document.getElementById('relay1')?.value.trim() || 'wss://relay.damus.io';
-      const r2 = document.getElementById('relay2')?.value.trim() || 'wss://nos.lol';
-      return [r1, r2].filter(Boolean);
+      return [
+        document.getElementById('relay1')?.value.trim() || 'wss://relay.damus.io',
+        document.getElementById('relay2')?.value.trim() || 'wss://nos.lol'
+      ].filter(Boolean);
     }
 
     function connectAndSubscribe() {
       const relays = getRelays();
       console.log('Trying relays:', relays);
 
-      if (relayPool) relayPool.close();
+      if (pool) pool.close();
       if (sub) sub.unsub();
 
-      if (!window.NostrTools || !window.NostrTools.RelayPool) {
-        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Nostr library not loaded – reload or check CDN</p>';
+      if (!window.NostrTools || !window.NostrTools.SimplePool) {
+        document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Nostr library not ready – reload page</p>';
         return;
       }
 
       try {
-        relayPool = new window.NostrTools.RelayPool(relays);
+        pool = new window.NostrTools.SimplePool();
       } catch (e) {
-        console.error('RelayPool failed:', e);
+        console.error('SimplePool failed:', e);
         document.getElementById('feed').innerHTML = '<p style="color:red; text-align:center;">Error: ' + e.message + '</p>';
         return;
       }
 
-      relayPool.on('open', relay => console.log('Connected:', relay.url));
-      relayPool.on('error', (relay, err) => console.error('Relay error:', relay?.url, err));
-
-      relayPool.connect();
-
       const since = Math.floor(Date.now() / 1000) - 86400 * 7;
-      sub = relayPool.sub([{ kinds: [1], since }]);
+      sub = pool.sub(relays, [{ kinds: [1], since }]);
 
       sub.on('event', event => {
-        console.log('Event:', event.id.slice(0,8));
+        console.log('Event received');
         renderNote(event);
       });
 
-      document.getElementById('feed').innerHTML = '<p style="color:#4caf50; text-align:center;">Fetching notes (wait 10-30s)...</p>';
+      document.getElementById('feed').innerHTML = '<p style="color:#4caf50; text-align:center;">Connecting & fetching notes...</p>';
     }
 
     function renderNote(event) {
@@ -124,7 +113,7 @@
 
     async function tryLogin() {
       if (!window.nostr) {
-        alert('No extension – try anonymously.');
+        alert('No Alby extension detected – try anonymous mode.');
         return;
       }
       try {
@@ -136,7 +125,7 @@
         document.getElementById('main-content').classList.remove('hidden');
         connectAndSubscribe();
       } catch (err) {
-        alert('Failed: ' + err.message);
+        alert('Connection failed: ' + err.message);
       }
     }
 
@@ -153,7 +142,7 @@
       document.getElementById('header').textContent = 'Friendzap';
       document.getElementById('login-screen').classList.remove('hidden');
       document.getElementById('main-content').classList.add('hidden');
-      if (relayPool) relayPool.close();
+      if (pool) pool.close();
     }
 
     function showSection(id) {
@@ -162,16 +151,24 @@
       document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
       Array.from(document.querySelectorAll('.nav-item')).find(n => n.textContent === (id === 'home' ? 'Home' : 'Settings')).classList.add('active');
     }
+
+    window.addEventListener('load', () => {
+      fetchBitcoinPrice();
+      set200WMA();
+      setInterval(fetchBitcoinPrice, 60000);
+      document.getElementById('login-screen').classList.remove('hidden');
+      document.getElementById('main-content').classList.add('hidden');
+    });
   </script>
 </head>
 <body>
 
   <div id="login-screen">
     <h1>Friendzap</h1>
-    <p>Connect with Alby or go anonymous for testing.</p>
+    <p>Connect with Alby or test anonymously (public notes only).</p>
     <button class="login-btn" onclick="tryLogin()">Connect with Alby</button>
     <button class="anon-btn" onclick="continueAnonymous()">Continue Anonymously</button>
-    <p style="font-size:14px; color:#aaa;">Reload if library load fails (check F12 Network tab for .bundle.js status 200).</p>
+    <p style="font-size:14px; color:#aaa;">If no feed/notes: Check F12 Network for nostr.bundle.js (200 OK?) and console logs.</p>
   </div>
 
   <div id="main-content" class="hidden">
@@ -183,8 +180,8 @@
         <div class="nav-item" onclick="showSection('settings')">Settings</div>
 
         <div id="home" class="section active">
-          <p style="color:#888;">Feed loading...</p>
-          <button class="retry" onclick="connectAndSubscribe()">Retry Feed</button>
+          <p style="color:#888;">Feed loading from relays...</p>
+          <button class="retry" onclick="connectAndSubscribe()">Retry / Refresh Feed</button>
         </div>
 
         <div id="settings" class="section">
