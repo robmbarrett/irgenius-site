@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Friendzap - Nostr Client</title>
-  <!-- Stable version – avoids v2.21.0 internal EOSE bug -->
   <script src="https://unpkg.com/nostr-tools@2.19.4/lib/nostr.bundle.js"></script>
   <style>
     body { margin:0; font-family:sans-serif; background:#0f0f0f; color:#e0e0e0; height:100vh; overflow:hidden; }
@@ -36,7 +35,6 @@
     let sub = null;
     let userPubkey = null;
 
-    // Confirm library ready
     setTimeout(() => {
       if (window.NostrTools && window.NostrTools.SimplePool) {
         console.log('Success: NostrTools loaded (v2.19.4)');
@@ -85,10 +83,16 @@
 
       pool = new window.NostrTools.SimplePool();
 
-      const since = Math.floor(Date.now() / 1000) - 86400 * 7;
+      const since = Math.floor(Date.now() / 1000) - 86400 * 30; // 30 days to ensure some content
       const filters = [{ kinds: [1], since }];
 
-      sub = pool.subscribeMany(relays, filters);
+      try {
+        sub = pool.subscribe(filters, relays); // Correct order: filters first, relays second
+      } catch (e) {
+        console.error('Subscription failed:', e);
+        document.getElementById('feed').innerHTML = '<p style="color:red;">Subscription error: ' + e.message + '</p>';
+        return;
+      }
 
       sub.on('event', event => {
         console.log('Event received:', event.id.slice(0, 8));
@@ -96,9 +100,9 @@
       });
 
       sub.on('eose', () => {
-        console.log('EOSE received – end of stored events');
+        console.log('EOSE received');
         if (document.querySelectorAll('.note').length === 0) {
-          document.getElementById('feed').innerHTML += '<p style="color:#ff9800; text-align:center;">No recent notes found (try longer time window or add relays)</p>';
+          document.getElementById('feed').innerHTML += '<p style="color:#ff9800; text-align:center;">No notes in last 30 days (add relays or check relay status)</p>';
         }
       });
 
