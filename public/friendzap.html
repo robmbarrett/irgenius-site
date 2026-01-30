@@ -63,7 +63,7 @@
       if (r2.startsWith('wss://')) relays.push(r2);
       if (relays.length === 0) relays.push('wss://relay.damus.io', 'wss://nos.lol');
       console.log('Parsed relays array:', relays);
-      return relays;
+      return relays.slice(); // Fresh copy to avoid reference issues
     }
 
     function connectAndSubscribe() {
@@ -88,9 +88,9 @@
       const filters = [{ kinds: [1], since }];
 
       try {
-        // IMPORTANT FIX: relays FIRST, filters SECOND – correct order for v2.19.4
+        // Swap order: relays first, filters second – matches most examples for v2.19.4
         sub = pool.subscribe(relays, filters);
-        console.log('Subscription created successfully');
+        console.log('Subscription created successfully with relays first');
       } catch (e) {
         console.error('Subscription failed:', e);
         document.getElementById('feed').innerHTML = '<p style="color:red;">Subscription error: ' + e.message + '</p>';
@@ -105,7 +105,7 @@
       sub.on('eose', () => {
         console.log('EOSE received');
         if (document.querySelectorAll('.note').length === 0) {
-          document.getElementById('feed').innerHTML += '<p style="color:#ff9800; text-align:center;">No notes found in last 30 days – try adding relays</p>';
+          document.getElementById('feed').innerHTML += '<p style="color:#ff9800; text-align:center;">No notes found – check relays or time window</p>';
         }
       });
 
@@ -184,7 +184,7 @@
     <p>Connect with Alby or browse anonymously.</p>
     <button class="login-btn" onclick="tryLogin()">Connect with Alby</button>
     <button class="anon-btn" onclick="continueAnonymous()">Continue Anonymously</button>
-    <p style="font-size:14px; color:#aaa;">Wait 10–90 seconds for notes. Check console for "Event received".</p>
+    <p style="font-size:14px; color:#aaa;">Wait 10–90 seconds. Look for "Event received" in console.</p>
   </div>
 
   <div id="main-content" class="hidden">
