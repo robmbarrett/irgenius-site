@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Friendzap - Nostr Client</title>
+  <script src="https://cdn.jsdelivr.net/npm/nostr-tools@2/lib/nostr.bundle.min.js"></script>
   <style>
     body { margin:0; font-family:sans-serif; background:#0f0f0f; color:#e0e0e0; height:100vh; overflow:hidden; }
     #header { background:#1a1a1a; padding:12px; text-align:center; font-size:28px; font-weight:bold; border-bottom:1px solid #333; }
@@ -28,8 +29,11 @@
     .anon-btn { background:#444; color:white; }
     #user-info { font-size:16px; color:#4caf50; margin:10px 0; }
     button.retry { margin:20px auto; display:block; padding:12px 24px; background:#0066cc; color:white; border:none; border-radius:6px; cursor:pointer; }
-    input[type="text"] { width:100%; padding:8px; margin:8px 0; background:#222; color:white; border:1px solid #444; }
-    #follows-info { margin-top:20px; font-size:14px; color:#aaa; }
+    input[type="text"], textarea { width:100%; padding:8px; margin:8px 0; background:#222; color:white; border:1px solid #444; }
+    label { margin:8px 0; display:block; }
+    .profile-field { margin:12px 0; }
+    .profile-field strong { display:inline-block; width:180px; }
+    small { color:#aaa; }
   </style>
   <script>
     let ws = null;
@@ -37,6 +41,9 @@
     let subscriptionId = null;
     let contactsSubId = null;
     let followsCount = 0;
+    let currentProfile = {}; // cache last kind 0 content
+    let currentTags = [];    // cache last kind 0 tags
+    let profileSubId = null;
 
     async function fetchBitcoinPrice() {
       try {
@@ -52,118 +59,85 @@
 
     function loadSavedRelay() {
       const saved = localStorage.getItem('friendzap-relay');
-      if (saved) {
-        document.getElementById('relay').value = saved;
-      }
+      if (saved) document.getElementById('relay').value = saved;
     }
 
     function saveRelay() {
       const url = document.getElementById('relay').value.trim();
       if (url && url.startsWith('wss://')) {
         localStorage.setItem('friendzap-relay', url);
-        console.log('Relay saved:', url);
       }
     }
 
     function getRelayUrl() {
       let url = document.getElementById('relay').value.trim();
-      if (!url || !url.startsWith('wss://')) {
-        url = 'wss://relay.damus.io';
-      }
-      console.log('Using relay:', url);
+      if (!url || !url.startsWith('wss://')) url = 'wss://relay.damus.io';
       return url;
     }
 
     function connectAndSubscribe() {
       saveRelay();
-
       const url = getRelayUrl();
 
-      if (ws) {
-        ws.close();
-      }
-
+      if (ws) ws.close();
       ws = new WebSocket(url);
 
       ws.onopen = () => {
-        console.log('WebSocket open to', url);
         document.getElementById('feed').innerHTML = '<p style="color:#4caf50; text-align:center;">Connected – requesting notes...</p>';
 
-        subscriptionId = 'notes-' + Math.random().toString(36).substring(2, 12);
-
+        subscriptionId = 'notes-' + Math.random().toString(36).substring(2,12);
         const since = Math.floor(Date.now() / 1000) - 86400 * 30;
-        const notesReq = [
-          "REQ",
-          subscriptionId,
-          { kinds: [1], since, limit: 50 }
-        ];
-        ws.send(JSON.stringify(notesReq));
-        console.log('Sent notes REQ');
+        ws.send(JSON.stringify(["REQ", subscriptionId, {kinds:[1], since, limit:50}]));
 
         if (userPubkey) {
-          contactsSubId = 'contacts-' + Math.random().toString(36).substring(2, 12);
-          const contactsReq = [
-            "REQ",
-            contactsSubId,
-            { kinds: [3], authors: [userPubkey], limit: 1 }
-          ];
-          ws.send(JSON.stringify(contactsReq));
-          console.log('Sent contacts REQ for pubkey', userPubkey);
+          contactsSubId = 'contacts-' + Math.random().toString(36).substring(2,12);
+          ws.send(JSON.stringify(["REQ", contactsSubId, {kinds:[3], authors:[userPubkey], limit:1}]));
           document.getElementById('follows-info').textContent = 'Loading your follows...';
+
+          // Also subscribe to own kind 0 for profile
+          profileSubId = 'profile-' + Math.random().toString(36).substring(2,12);
+          ws.send(JSON.stringify(["REQ", profileSubId, {kinds:[0], authors:[userPubkey], limit:1}]));
         }
       };
 
       ws.onmessage = (msgEvent) => {
         const msg = JSON.parse(msgEvent.data);
-        console.log('Received:', msg);
-
         if (msg[0] === 'EVENT') {
           const event = msg[2];
           if (event.kind === 1) {
             renderNote(event);
           } else if (event.kind === 3 && event.pubkey === userPubkey) {
+            const followed = event.tags.filter(t => t[0]==='p').map(t => t[1]);
+            followsCount = followed.length;
+            document.getElementById('follows-info').textContent = `You follow ${followsCount} people`;
+          } else if (event.kind === 0 && event.pubkey === userPubkey) {
             try {
-              const followedPubkeys = event.tags
-                .filter(tag => tag[0] === 'p')
-                .map(tag => tag[1]);
-              followsCount = followedPubkeys.length;
-              document.getElementById('follows-info').textContent = `You follow ${followsCount} people`;
-              console.log('Follows count loaded:', followsCount);
-            } catch (e) {
-              console.error('Error parsing kind 3:', e);
-              document.getElementById('follows-info').textContent = 'Error loading follows';
-            }
+              currentProfile = JSON.parse(event.content || '{}');
+              currentTags = event.tags || [];
+              if (document.getElementById('profile').classList.contains('active')) {
+                renderProfile();
+              }
+            } catch {}
           }
-        } else if (msg[0] === 'EOSE' && msg[1] === subscriptionId) {
-          console.log('EOSE for notes');
-          if (document.querySelectorAll('.note').length === 0) {
-            document.getElementById('feed').innerHTML += '<p style="color:#ff9800; text-align:center;">No recent notes on this relay</p>';
+        } else if (msg[0] === 'EOSE') {
+          if (msg[1] === subscriptionId && document.querySelectorAll('.note').length === 0) {
+            document.getElementById('feed').innerHTML += '<p style="color:#ff9800; text-align:center;">No recent notes found</p>';
           }
-        } else if (msg[0] === 'EOSE' && msg[1] === contactsSubId) {
-          console.log('EOSE for contacts');
-          if (followsCount === 0) {
-            document.getElementById('follows-info').textContent = 'No follows found on this relay';
+          if (msg[1] === contactsSubId && followsCount === 0) {
+            document.getElementById('follows-info').textContent = 'No follows found';
           }
-        } else if (msg[0] === 'NOTICE') {
-          console.warn('Relay notice:', msg[1]);
         }
       };
 
-      ws.onerror = (err) => {
-        console.error('WS error:', err);
-        document.getElementById('feed').innerHTML = '<p style="color:red;">Connection error – check relay URL</p>';
-      };
-
-      ws.onclose = () => {
-        console.log('WS closed');
+      ws.onerror = () => {
+        document.getElementById('feed').innerHTML = '<p style="color:red;">Connection error – check relay</p>';
       };
     }
 
     function renderNote(event) {
       const feed = document.getElementById('feed');
-      const short = event.pubkey.slice(0,8) + '…' + event.pubkey.slice(-8);
-      const time = new Date(event.created_at * 1000).toLocaleString([], {hour:'2-digit', minute:'2-digit', month:'short', day:'numeric'});
-
+      const short = event.pubkey.slice(0,8)+'…'+event.pubkey.slice(-8);
+      const time = new Date(event.created_at*1000).toLocaleString([],{hour:'2-digit',minute:'2-digit',month:'short',day:'numeric'});
       const div = document.createElement('div');
       div.className = 'note';
       div.innerHTML = `<div class="pubkey">npub1${short}</div><div class="content">${escapeHtml(event.content)}</div><div class="time">${time}</div>`;
@@ -176,19 +150,19 @@
 
     async function tryLogin() {
       if (!window.nostr) {
-        alert('No Alby/NIP-07 extension detected.');
+        alert('No NIP-07 extension (Alby etc.) detected.');
         return;
       }
       try {
         userPubkey = await window.nostr.getPublicKey();
-        const short = userPubkey.slice(0,8) + '…' + userPubkey.slice(-8);
+        const short = userPubkey.slice(0,8)+'…'+userPubkey.slice(-8);
         document.getElementById('user-info').textContent = `Logged in as npub1${short}`;
         document.getElementById('header').textContent = `Friendzap - npub1${short}`;
         document.getElementById('login-screen').classList.add('hidden');
         document.getElementById('main-content').classList.remove('hidden');
         connectAndSubscribe();
       } catch (err) {
-        alert('Connection failed: ' + err.message);
+        alert('Login failed: ' + err.message);
       }
     }
 
@@ -202,6 +176,8 @@
     function logout() {
       userPubkey = null;
       followsCount = 0;
+      currentProfile = {};
+      currentTags = [];
       document.getElementById('user-info').textContent = '';
       document.getElementById('follows-info').textContent = '';
       document.getElementById('header').textContent = 'Friendzap';
@@ -214,7 +190,70 @@
       document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
       document.getElementById(id).classList.add('active');
       document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-      Array.from(document.querySelectorAll('.nav-item')).find(n => n.textContent === (id === 'home' ? 'Home' : 'Settings')).classList.add('active');
+      const target = id === 'home' ? 'Home' : (id === 'settings' ? 'Settings' : 'Profile');
+      const item = Array.from(document.querySelectorAll('.nav-item')).find(n => n.textContent === target);
+      if (item) item.classList.add('active');
+
+      if (id === 'profile' && userPubkey) {
+        renderProfile();
+      }
+    }
+
+    function renderProfile() {
+      document.getElementById('view-name').textContent = currentProfile.name || '(not set)';
+      document.getElementById('view-display-name').textContent = currentProfile.display_name || '(not set)';
+      document.getElementById('view-website').textContent = currentProfile.website || '(not set)';
+      document.getElementById('view-about').textContent = currentProfile.about || '(not set)';
+      document.getElementById('view-lud16').textContent = currentProfile.lud16 || '(not set)';
+      document.getElementById('view-nip05').textContent = currentProfile.nip05 || '(not set)';
+
+      const geohashTag = currentTags.find(t => t[0] === 'g');
+      const isSharing = !!geohashTag;
+      document.getElementById('view-location-status').textContent = isSharing
+        ? `Sharing approximate location (geohash: ${geohashTag[1]})`
+        : 'Not sharing location (private by default)';
+
+      // Pre-select radio
+      document.querySelector(`input[name="share-location"][value="${isSharing ? 'yes' : 'no'}"]`).checked = true;
+    }
+
+    async function saveLocation() {
+      if (!userPubkey || !window.nostr) {
+        alert('Must be logged in with NIP-07 to update profile.');
+        return;
+      }
+
+      const share = document.querySelector('input[name="share-location"]:checked').value === 'yes';
+      let newContent = { ...currentProfile };
+      let newTags = currentTags.filter(t => t[0] !== 'g'); // remove old geohash if any
+
+      if (share) {
+        // Placeholder — replace with real geohash from geolocation or input later
+        const geohash = '9q8y'; // example: ~San Francisco area, coarse
+        newContent.location = 'Approximate area shared'; // optional human-readable
+        newTags.push(['g', geohash]);
+      } else {
+        delete newContent.location;
+      }
+
+      const event = {
+        kind: 0,
+        content: JSON.stringify(newContent),
+        tags: newTags,
+        created_at: Math.floor(Date.now() / 1000),
+        pubkey: userPubkey
+      };
+
+      try {
+        event.id = nostrTools.getEventHash(event);
+        event.sig = await window.nostr.signEvent(event);
+        ws.send(JSON.stringify(['EVENT', event]));
+        alert('Location settings published! Refresh profile to see changes.');
+        // Re-fetch own kind 0 to update view
+        ws.send(JSON.stringify(["REQ", 'profile-refresh-' + Date.now(), {kinds:[0], authors:[userPubkey], limit:1}]));
+      } catch (err) {
+        alert('Failed to publish: ' + err.message);
+      }
     }
 
     window.addEventListener('load', () => {
@@ -223,7 +262,6 @@
       set200WMA();
       setInterval(fetchBitcoinPrice, 60000);
       document.getElementById('login-screen').classList.remove('hidden');
-      document.getElementById('main-content').classList.add('hidden');
     });
   </script>
 </head>
@@ -245,6 +283,7 @@
         <div id="follows-info"></div>
         <div class="nav-item active" onclick="showSection('home')">Home</div>
         <div class="nav-item" onclick="showSection('settings')">Settings</div>
+        <div class="nav-item" onclick="showSection('profile')">Profile</div>
 
         <div id="home" class="section active">
           <p style="color:#888;">Feed loading...</p>
@@ -254,9 +293,33 @@
         <div id="settings" class="section">
           <h3>Network Settings</h3>
           <label>Relay URL (wss://...):</label>
-          <input type="text" id="relay" value="wss://relay.damus.io" style="width:100%; padding:8px; margin:8px 0; background:#222; color:white; border:1px solid #444;"/>
+          <input type="text" id="relay" value="wss://relay.damus.io"/>
           <button onclick="connectAndSubscribe()" style="padding:10px 20px; background:#0066cc; color:white; border:none; border-radius:4px; cursor:pointer; margin:10px 0;">Save & Refresh</button>
           <button onclick="logout()" style="padding:10px 20px; background:#cc0000; color:white; border:none; border-radius:4px; cursor:pointer;">Disconnect</button>
+        </div>
+
+        <div id="profile" class="section">
+          <h2>Your Profile</h2>
+          <div class="profile-field"><strong>Username / Name:</strong> <span id="view-name">(loading...)</span></div>
+          <div class="profile-field"><strong>Display Name:</strong> <span id="view-display-name">(loading...)</span></div>
+          <div class="profile-field"><strong>Website:</strong> <span id="view-website">(loading...)</span></div>
+          <div class="profile-field"><strong>About Me:</strong> <span id="view-about">(loading...)</span></div>
+          <div class="profile-field"><strong>Bitcoin Lightning Address:</strong> <span id="view-lud16">(loading...)</span></div>
+          <div class="profile-field"><strong>NIP-05 Verified:</strong> <span id="view-nip05">(loading...)</span></div>
+
+          <h3>GeoLocation (Approximate Area)</h3>
+          <p id="view-location-status">Loading...</p>
+
+          <button id="btn-edit-location" onclick="document.getElementById('location-edit').style.display='block';">Edit Location</button>
+
+          <div id="location-edit" style="display:none; margin-top:16px;">
+            <label><input type="radio" name="share-location" value="no" checked> Do not share location</label>
+            <label><input type="radio" name="share-location" value="yes"> Share approximate location</label>
+            <p><small>Note: If enabled, a coarse geohash (~city level) is added to your public profile (kind 0). This is permanent on relays — use carefully for privacy.</small></p>
+            <button onclick="saveLocation()" style="padding:10px 20px; background:#0066cc; color:white; border:none; border-radius:4px; cursor:pointer; margin-top:12px;">Save Location Settings</button>
+          </div>
+
+          <p style="margin-top:30px;"><small>Full profile editing (name, about, etc.) coming soon. For now, focus is location sharing toggle.</small></p>
         </div>
       </div>
 
