@@ -31,19 +31,24 @@
     button.retry { margin:20px auto; display:block; padding:12px 24px; background:#0066cc; color:white; border:none; border-radius:6px; cursor:pointer; }
     input[type="text"], textarea { width:100%; padding:8px; margin:8px 0; background:#222; color:white; border:1px solid #444; }
     label { margin:8px 0; display:block; }
-    .profile-field { margin:12px 0; }
-    .profile-field strong { display:inline-block; width:180px; }
-    small { color:#aaa; }
+    .profile-field { margin:16px 0; font-size:16px; }
+    .profile-field strong { display:inline-block; width:220px; color:#aaa; }
+    small { color:#888; }
+    #center-content { padding:20px; }
+    #feed-content, #profile-content { display:none; }
+    #feed-content.active, #profile-content.active { display:block; }
+    .back-btn { padding:10px 16px; background:#444; color:white; border:none; border-radius:6px; cursor:pointer; margin-bottom:20px; }
   </style>
   <script>
     let ws = null;
     let userPubkey = null;
-    let subscriptionId = null;
+    let subscriptionId = null;       // notes
     let contactsSubId = null;
-    let followsCount = 0;
-    let currentProfile = {}; // cache last kind 0 content
-    let currentTags = [];    // cache last kind 0 tags
     let profileSubId = null;
+    let followsCount = 0;
+    let currentProfile = {};
+    let currentTags = [];
+    let currentView = 'feed'; // 'feed' or 'profile'
 
     async function fetchBitcoinPrice() {
       try {
@@ -53,9 +58,7 @@
       } catch {}
     }
 
-    function set200WMA() {
-      document.getElementById('btc-200wma').textContent = '~$57849';
-    }
+    function set200WMA() { document.getElementById('btc-200wma').textContent = '~$57849'; }
 
     function loadSavedRelay() {
       const saved = localStorage.getItem('friendzap-relay');
@@ -64,9 +67,7 @@
 
     function saveRelay() {
       const url = document.getElementById('relay').value.trim();
-      if (url && url.startsWith('wss://')) {
-        localStorage.setItem('friendzap-relay', url);
-      }
+      if (url && url.startsWith('wss://')) localStorage.setItem('friendzap-relay', url);
     }
 
     function getRelayUrl() {
@@ -78,7 +79,6 @@
     function connectAndSubscribe() {
       saveRelay();
       const url = getRelayUrl();
-
       if (ws) ws.close();
       ws = new WebSocket(url);
 
@@ -92,11 +92,10 @@
         if (userPubkey) {
           contactsSubId = 'contacts-' + Math.random().toString(36).substring(2,12);
           ws.send(JSON.stringify(["REQ", contactsSubId, {kinds:[3], authors:[userPubkey], limit:1}]));
-          document.getElementById('follows-info').textContent = 'Loading your follows...';
 
-          // Also subscribe to own kind 0 for profile
-          profileSubId = 'profile-' + Math.random().toString(36).substring(2,12);
-          ws.send(JSON.stringify(["REQ", profileSubId, {kinds:[0], authors:[userPubkey], limit:1}]));
+          // Persistent kind 0 sub
+          profileSubId = 'profile-persist-' + Math.random().toString(36).substring(2,12);
+          ws.send(JSON.stringify(["REQ", profileSubId, {kinds:[0], authors:[userPubkey], limit:5}])); // limit 5 to catch recent ones
         }
       };
 
@@ -114,10 +113,8 @@
             try {
               currentProfile = JSON.parse(event.content || '{}');
               currentTags = event.tags || [];
-              if (document.getElementById('profile').classList.contains('active')) {
-                renderProfile();
-              }
-            } catch {}
+              if (currentView === 'profile') renderProfile();
+            } catch (e) { console.error('Bad profile JSON', e); }
           }
         } else if (msg[0] === 'EOSE') {
           if (msg[1] === subscriptionId && document.querySelectorAll('.note').length === 0) {
@@ -149,10 +146,7 @@
     }
 
     async function tryLogin() {
-      if (!window.nostr) {
-        alert('No NIP-07 extension (Alby etc.) detected.');
-        return;
-      }
+      if (!window.nostr) { alert('No NIP-07 extension detected.'); return; }
       try {
         userPubkey = await window.nostr.getPublicKey();
         const short = userPubkey.slice(0,8)+'…'+userPubkey.slice(-8);
@@ -161,9 +155,7 @@
         document.getElementById('login-screen').classList.add('hidden');
         document.getElementById('main-content').classList.remove('hidden');
         connectAndSubscribe();
-      } catch (err) {
-        alert('Login failed: ' + err.message);
-      }
+      } catch (err) { alert('Login failed: ' + err.message); }
     }
 
     function continueAnonymous() {
@@ -174,10 +166,7 @@
     }
 
     function logout() {
-      userPubkey = null;
-      followsCount = 0;
-      currentProfile = {};
-      currentTags = [];
+      userPubkey = null; followsCount = 0; currentProfile = {}; currentTags = [];
       document.getElementById('user-info').textContent = '';
       document.getElementById('follows-info').textContent = '';
       document.getElementById('header').textContent = 'Friendzap';
@@ -186,22 +175,46 @@
       if (ws) ws.close();
     }
 
-    function showSection(id) {
-      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-      document.getElementById(id).classList.add('active');
+    function switchToFeed() {
+      currentView = 'feed';
+      document.getElementById('feed-content').classList.add('active');
+      document.getElementById('profile-content').classList.remove('active');
       document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-      const target = id === 'home' ? 'Home' : (id === 'settings' ? 'Settings' : 'Profile');
-      const item = Array.from(document.querySelectorAll('.nav-item')).find(n => n.textContent === target);
-      if (item) item.classList.add('active');
+      document.querySelector('.nav-item[onclick*="home"]').classList.add('active');
+      document.getElementById('center-header').textContent = 'Feed';
+    }
 
-      if (id === 'profile' && userPubkey) {
-        renderProfile();
-      }
+    function switchToProfile() {
+      currentView = 'profile';
+      document.getElementById('feed-content').classList.remove('active');
+      document.getElementById('profile-content').classList.add('active');
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      document.querySelector('.nav-item[onclick*="profile"]').classList.add('active');
+      document.getElementById('center-header').textContent = 'Your Profile';
+      if (userPubkey) fetchOwnProfile(); // force refresh
+      renderProfile();
+    }
+
+    function fetchOwnProfile() {
+      if (!ws || !userPubkey) return;
+      const id = 'profile-pull-' + Date.now();
+      ws.send(JSON.stringify(["REQ", id, {
+        kinds: [0],
+        authors: [userPubkey],
+        limit: 3,          // get a few in case
+        since: Math.floor(Date.now()/1000) - 86400*365  // last year
+      }]));
+      // Short timeout to show loading if nothing arrives
+      setTimeout(() => {
+        if (Object.keys(currentProfile).length === 0) {
+          document.getElementById('view-name').textContent = '(not found on this relay)';
+        }
+      }, 5000);
     }
 
     function renderProfile() {
       document.getElementById('view-name').textContent = currentProfile.name || '(not set)';
-      document.getElementById('view-display-name').textContent = currentProfile.display_name || '(not set)';
+      document.getElementById('view-display-name').textContent = currentProfile.display_name || currentProfile.name || '(not set)';
       document.getElementById('view-website').textContent = currentProfile.website || '(not set)';
       document.getElementById('view-about').textContent = currentProfile.about || '(not set)';
       document.getElementById('view-lud16').textContent = currentProfile.lud16 || '(not set)';
@@ -213,24 +226,18 @@
         ? `Sharing approximate location (geohash: ${geohashTag[1]})`
         : 'Not sharing location (private by default)';
 
-      // Pre-select radio
       document.querySelector(`input[name="share-location"][value="${isSharing ? 'yes' : 'no'}"]`).checked = true;
     }
 
     async function saveLocation() {
-      if (!userPubkey || !window.nostr) {
-        alert('Must be logged in with NIP-07 to update profile.');
-        return;
-      }
-
+      if (!userPubkey || !window.nostr) { alert('Must be logged in with NIP-07.'); return; }
       const share = document.querySelector('input[name="share-location"]:checked').value === 'yes';
       let newContent = { ...currentProfile };
-      let newTags = currentTags.filter(t => t[0] !== 'g'); // remove old geohash if any
+      let newTags = currentTags.filter(t => t[0] !== 'g');
 
       if (share) {
-        // Placeholder — replace with real geohash from geolocation or input later
-        const geohash = '9q8y'; // example: ~San Francisco area, coarse
-        newContent.location = 'Approximate area shared'; // optional human-readable
+        const geohash = '9q8y'; // placeholder — next: real geohash
+        newContent.location = 'Approximate area shared';
         newTags.push(['g', geohash]);
       } else {
         delete newContent.location;
@@ -248,12 +255,9 @@
         event.id = nostrTools.getEventHash(event);
         event.sig = await window.nostr.signEvent(event);
         ws.send(JSON.stringify(['EVENT', event]));
-        alert('Location settings published! Refresh profile to see changes.');
-        // Re-fetch own kind 0 to update view
-        ws.send(JSON.stringify(["REQ", 'profile-refresh-' + Date.now(), {kinds:[0], authors:[userPubkey], limit:1}]));
-      } catch (err) {
-        alert('Failed to publish: ' + err.message);
-      }
+        alert('Published! It may take a moment to appear.');
+        setTimeout(fetchOwnProfile, 2000); // re-pull after publish
+      } catch (err) { alert('Publish failed: ' + err.message); }
     }
 
     window.addEventListener('load', () => {
@@ -281,50 +285,50 @@
       <div class="pane left-pane">
         <div id="user-info"></div>
         <div id="follows-info"></div>
-        <div class="nav-item active" onclick="showSection('home')">Home</div>
-        <div class="nav-item" onclick="showSection('settings')">Settings</div>
-        <div class="nav-item" onclick="showSection('profile')">Profile</div>
+        <div class="nav-item active" onclick="switchToFeed()">Home / Feed</div>
+        <div class="nav-item" onclick="switchToProfile()">Profile</div>
+        <div class="nav-item" onclick="document.getElementById('settings').classList.toggle('active');">Settings</div>
 
-        <div id="home" class="section active">
-          <p style="color:#888;">Feed loading...</p>
-          <button class="retry" onclick="connectAndSubscribe()">Retry / Refresh Feed</button>
-        </div>
-
-        <div id="settings" class="section">
+        <div id="settings" class="section" style="display:none; padding:20px;">
           <h3>Network Settings</h3>
           <label>Relay URL (wss://...):</label>
           <input type="text" id="relay" value="wss://relay.damus.io"/>
-          <button onclick="connectAndSubscribe()" style="padding:10px 20px; background:#0066cc; color:white; border:none; border-radius:4px; cursor:pointer; margin:10px 0;">Save & Refresh</button>
-          <button onclick="logout()" style="padding:10px 20px; background:#cc0000; color:white; border:none; border-radius:4px; cursor:pointer;">Disconnect</button>
+          <button onclick="connectAndSubscribe()" style="padding:10px 20px; background:#0066cc; color:white; border:none; border-radius:4px; cursor:pointer; margin:10px 0 0 0;">Save & Reconnect</button>
+          <button onclick="logout()" style="padding:10px 20px; background:#cc0000; color:white; border:none; border-radius:4px; cursor:pointer; margin:10px 0 0 10px;">Disconnect</button>
+        </div>
+      </div>
+
+      <div class="pane center-pane" id="center-content">
+        <h2 id="center-header">Feed</h2>
+
+        <div id="feed-content" class="active">
+          <div id="feed"><p style="color:#666; text-align:center; margin-top:100px;">Feed loading from relay...</p></div>
+          <button class="retry" onclick="connectAndSubscribe()">Retry / Refresh Feed</button>
         </div>
 
-        <div id="profile" class="section">
-          <h2>Your Profile</h2>
+        <div id="profile-content">
+          <button class="back-btn" onclick="switchToFeed()">← Back to Feed</button>
           <div class="profile-field"><strong>Username / Name:</strong> <span id="view-name">(loading...)</span></div>
           <div class="profile-field"><strong>Display Name:</strong> <span id="view-display-name">(loading...)</span></div>
           <div class="profile-field"><strong>Website:</strong> <span id="view-website">(loading...)</span></div>
           <div class="profile-field"><strong>About Me:</strong> <span id="view-about">(loading...)</span></div>
-          <div class="profile-field"><strong>Bitcoin Lightning Address:</strong> <span id="view-lud16">(loading...)</span></div>
+          <div class="profile-field"><strong>Bitcoin Lightning Address (lud16):</strong> <span id="view-lud16">(loading...)</span></div>
           <div class="profile-field"><strong>NIP-05 Verified:</strong> <span id="view-nip05">(loading...)</span></div>
 
           <h3>GeoLocation (Approximate Area)</h3>
           <p id="view-location-status">Loading...</p>
 
-          <button id="btn-edit-location" onclick="document.getElementById('location-edit').style.display='block';">Edit Location</button>
+          <button onclick="document.getElementById('location-edit').style.display='block';">Edit Location</button>
 
           <div id="location-edit" style="display:none; margin-top:16px;">
             <label><input type="radio" name="share-location" value="no" checked> Do not share location</label>
             <label><input type="radio" name="share-location" value="yes"> Share approximate location</label>
-            <p><small>Note: If enabled, a coarse geohash (~city level) is added to your public profile (kind 0). This is permanent on relays — use carefully for privacy.</small></p>
+            <p><small>Note: Enabling adds a coarse public geohash to your kind 0 profile. Use carefully — it's permanent on relays.</small></p>
             <button onclick="saveLocation()" style="padding:10px 20px; background:#0066cc; color:white; border:none; border-radius:4px; cursor:pointer; margin-top:12px;">Save Location Settings</button>
           </div>
 
-          <p style="margin-top:30px;"><small>Full profile editing (name, about, etc.) coming soon. For now, focus is location sharing toggle.</small></p>
+          <p style="margin-top:40px;"><small>Full editing of name/about/etc. coming next. If fields stay "(not set)", try a different relay (many store profiles better).</small></p>
         </div>
-      </div>
-
-      <div class="pane center-pane" id="feed">
-        <p style="color:#666; text-align:center; margin-top:100px;">Feed loading from relay...</p>
       </div>
 
       <div class="pane right-pane">
