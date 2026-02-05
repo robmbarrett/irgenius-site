@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Relay Settings - irgenius.org</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: #f0f0f0;
+      margin: 0;
+      padding: 20px;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .modal {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+      max-width: 500px;
+      width: 90%;
+      padding: 24px;
+      position: relative;
+      animation: fadeIn 0.3s;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+    h1 { margin-top: 0; font-size: 1.6rem; }
+    .relay-item {
+      display: flex;
+      align-items: center;
+      margin: 12px 0;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+    }
+    .relay-url { flex: 1; word-break: break-all; font-family: monospace; font-size: 0.95rem; }
+    input[type="text"] { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+    .rw-toggle { margin: 0 8px; font-size: 0.9rem; }
+    button.remove { background: #ff4d4d; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; }
+    .add-section { margin-top: 20px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .actions { margin-top: 24px; text-align: right; }
+    button.primary { background: #27ae60; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; }
+    button.secondary { background: #3498db; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; margin-left: 10px; }
+    #status { margin-top: 16px; color: #555; text-align: center; }
+  </style>
+</head>
+<body>
+
+<div class="modal">
+  <h1>Relay Settings</h1>
+  <p>Edit your preferred Nostr relays (publishes kind 10002 via Alby). Most clients will use this list for your data.</p>
+
+  <div id="relayList"></div>
+
+  <div class="add-section">
+    <input type="text" id="newRelay" placeholder="wss://relay.example.com" />
+    <label class="rw-toggle"><input type="checkbox" id="newRead" checked> Read</label>
+    <label class="rw-toggle"><input type="checkbox" id="newWrite" checked> Write</label>
+    <button onclick="addRelay()">Add</button>
+  </div>
+
+  <div class="actions">
+    <button class="secondary" onclick="resetDefaults()">Reset Defaults</button>
+    <button class="primary" onclick="publishRelays()">Save & Publish</button>
+  </div>
+
+  <div id="status"></div>
+</div>
+
+<script>
+// Default relays (popular, reliable ones)
+let relays = [
+  { url: "wss://relay.damus.io", read: true, write: true },
+  { url: "wss://nos.lol", read: true, write: true },
+  { url: "wss://nostr-pub.wellorder.net", read: true, write: false },
+  { url: "wss://relay.nostr.band", read: true, write: true },
+  { url: "wss://purplepag.es", read: true, write: false }
+];
+
+function renderRelays() {
+  const list = document.getElementById('relayList');
+  list.innerHTML = '';
+  relays.forEach((r, index) => {
+    const div = document.createElement('div');
+    div.className = 'relay-item';
+    div.innerHTML = `
+      <span class="relay-url">${r.url}</span>
+      <label class="rw-toggle"><input type="checkbox" ${r.read ? 'checked' : ''} onchange="relays[${index}].read = this.checked"> Read</label>
+      <label class="rw-toggle"><input type="checkbox" ${r.write ? 'checked' : ''} onchange="relays[${index}].write = this.checked"> Write</label>
+      <button class="remove" onclick="removeRelay(${index})">Remove</button>
+    `;
+    list.appendChild(div);
+  });
+}
+
+function addRelay() {
+  const url = document.getElementById('newRelay').value.trim();
+  if (!url.startsWith('ws')) return alert('Enter a valid wss:// or ws:// URL');
+  const read = document.getElementById('newRead').checked;
+  const write = document.getElementById('newWrite').checked;
+  relays.push({ url, read, write });
+  renderRelays();
+  document.getElementById('newRelay').value = '';
+}
+
+function removeRelay(index) {
+  relays.splice(index, 1);
+  renderRelays();
+}
+
+function resetDefaults() {
+  if (confirm('Reset to defaults?')) {
+    relays = [
+      { url: "wss://relay.damus.io", read: true, write: true },
+      { url: "wss://nos.lol", read: true, write: true },
+      { url: "wss://nostr-pub.wellorder.net", read: true, write: false },
+      { url: "wss://relay.nostr.band", read: true, write: true },
+      { url: "wss://purplepag.es", read: true, write: false }
+    ];
+    renderRelays();
+  }
+}
+
+async function publishRelays() {
+  const status = document.getElementById('status');
+  status.textContent = 'Publishing...';
+
+  if (!window.nostr) {
+    status.textContent = 'No Nostr extension (Alby) detected — install/enable it.';
+    return;
+  }
+
+  try {
+    const pubkey = await window.nostr.getPublicKey();
+    const event = {
+      kind: 10002,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: relays.map(r => {
+        const tag = ["r", r.url];
+        if (r.read && !r.write) tag.push("read");
+        if (r.write && !r.read) tag.push("write");
+        return tag;
+      }),
+      content: "",
+      pubkey
+    };
+
+    const signed = await window.nostr.signEvent(event);
+    await window.nostr.publish(signed);  // Alby handles broadcasting
+
+    status.textContent = 'Success! Kind 10002 published. Refresh Friendzap or other clients — your relays should now be used for your data.';
+  } catch (err) {
+    status.textContent = 'Error: ' + (err.message || 'Failed to publish. Check Alby permissions.');
+    console.error(err);
+  }
+}
+
+renderRelays();
+</script>
+</body>
+</html>
