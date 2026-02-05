@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Friendzap - Simple Nostr Client</title>
 
-  <!-- nostr-tools (for manual relay publishing + basic event handling) -->
+  <!-- nostr-tools -->
   <script src="https://unpkg.com/nostr-tools@2.11.0/lib/nostr.bundle.js"></script>
 
   <style>
@@ -57,7 +57,6 @@
       padding: 12px 0;
     }
     .note:last-child { border-bottom: none; }
-    /* Modal */
     .modal-overlay {
       position: fixed;
       inset: 0;
@@ -155,8 +154,7 @@
 </div>
 
 <script>
-// ────────────────────────────────────────────────
-// Default relays (popular & reliable)
+// Default relays
 let relays = [
   { url: "wss://relay.damus.io",        read: true,  write: true  },
   { url: "wss://nos.lol",               read: true,  write: true  },
@@ -167,8 +165,7 @@ let relays = [
 
 let pubkey = null;
 
-// ────────────────────────────────────────────────
-// Render relays inside modal
+// Render relays in modal
 function renderRelays() {
   const list = document.getElementById('relayList');
   list.innerHTML = '';
@@ -212,7 +209,7 @@ function resetDefaults() {
   }
 }
 
-// Publish kind 10002 using nostr-tools (manual publish)
+// Publish kind 10002
 async function publishRelays() {
   const status = document.getElementById('modalStatus');
   status.textContent = 'Publishing...';
@@ -242,7 +239,7 @@ async function publishRelays() {
 
     const signed = await window.nostr.signEvent(event);
 
-    // Publish to several reliable relays
+    // Publish to reliable relays
     const publishUrls = [
       'wss://relay.damus.io',
       'wss://nos.lol',
@@ -254,8 +251,7 @@ async function publishRelays() {
 
     for (const url of publishUrls) {
       try {
-        const relay = NostrTools.relayInit(url);
-        await relay.connect();
+        const relay = await NostrTools.Relay.connect(url);
         await relay.publish(signed);
         relay.close();
         successCount++;
@@ -265,7 +261,7 @@ async function publishRelays() {
     }
 
     if (successCount > 0) {
-      status.textContent = `Success! Published to ${successCount} relay(s). Refresh clients in 10–60s.`;
+      status.textContent = `Success! Published to ${successCount} relay(s). Refresh clients.`;
       status.className = 'success';
     } else {
       status.textContent = 'Failed to publish — check console.';
@@ -278,7 +274,6 @@ async function publishRelays() {
   }
 }
 
-// ────────────────────────────────────────────────
 // Login
 document.getElementById('loginBtn').onclick = async () => {
   if (!window.nostr) {
@@ -298,44 +293,50 @@ document.getElementById('loginBtn').onclick = async () => {
   }
 };
 
-// Open relay settings modal
+// Open relay settings
 document.getElementById('settingsBtn').onclick = () => {
   document.getElementById('settingsModal').style.display = 'flex';
   renderRelays();
 };
 
-// Basic profile load (kind 0)
+// Load profile (kind 0)
 async function loadProfile() {
   if (!pubkey) return;
-  const relay = NostrTools.relayInit('wss://relay.damus.io');
-  await relay.connect();
-  const sub = relay.sub([{ kinds: [0], authors: [pubkey], limit: 1 }]);
-  sub.on('event', e => {
-    try {
-      const m = JSON.parse(e.content);
-      document.getElementById('profileName').textContent = m.name || 'Anonymous';
-      document.getElementById('profileBio').textContent = m.about || '';
-      if (m.picture) document.getElementById('profilePic').src = m.picture;
-    } catch {}
-  });
+  try {
+    const relay = await NostrTools.Relay.connect('wss://relay.damus.io');
+    const sub = relay.sub([{ kinds: [0], authors: [pubkey], limit: 1 }]);
+    sub.on('event', e => {
+      try {
+        const m = JSON.parse(e.content);
+        document.getElementById('profileName').textContent = m.name || 'Anonymous';
+        document.getElementById('profileBio').textContent = m.about || '';
+        if (m.picture) document.getElementById('profilePic').src = m.picture;
+      } catch {}
+    });
+  } catch (err) {
+    console.error('Profile load failed:', err);
+  }
 }
 
-// Basic notes load (kind 1 example)
+// Load notes (kind 1 example)
 async function loadNotes() {
   const feed = document.getElementById('feed');
   feed.innerHTML = '<p>Loading notes...</p>';
-  const relay = NostrTools.relayInit('wss://relay.damus.io');
-  await relay.connect();
-  const sub = relay.sub([{ kinds: [1], limit: 10 }]);
-  sub.on('event', e => {
-    const div = document.createElement('div');
-    div.className = 'note';
-    div.innerHTML = `<strong>${e.pubkey.slice(0,10)}...</strong><p>${e.content}</p>`;
-    feed.appendChild(div);
-  });
-  sub.on('eose', () => {
-    if (feed.children.length <= 1) feed.innerHTML = '<p>No recent notes.</p>';
-  });
+  try {
+    const relay = await NostrTools.Relay.connect('wss://relay.damus.io');
+    const sub = relay.sub([{ kinds: [1], limit: 10 }]);
+    sub.on('event', e => {
+      const div = document.createElement('div');
+      div.className = 'note';
+      div.innerHTML = `<strong>${e.pubkey.slice(0,10)}...</strong><p>${e.content}</p>`;
+      feed.appendChild(div);
+    });
+    sub.on('eose', () => {
+      if (feed.children.length <= 1) feed.innerHTML = '<p>No recent notes.</p>';
+    });
+  } catch (err) {
+    console.error('Notes load failed:', err);
+  }
 }
 </script>
 </body>
