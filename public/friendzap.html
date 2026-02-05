@@ -3,401 +3,340 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Friendzap - Nostr Client</title>
-  <script src="https://cdn.jsdelivr.net/npm/nostr-tools@2/lib/nostr.bundle.min.js"></script>
+  <title>Friendzap - Simple Nostr Client</title>
+
+  <!-- nostr-tools (for manual relay publishing + basic event handling) -->
+  <script src="https://unpkg.com/nostr-tools@2.11.0/lib/nostr.bundle.js"></script>
+
   <style>
-    body { margin:0; font-family:sans-serif; background:#0f0f0f; color:#e0e0e0; height:100vh; overflow:hidden; }
-    #header { background:#1a1a1a; padding:12px; text-align:center; font-size:28px; font-weight:bold; border-bottom:1px solid #333; }
-    .container { display:flex; height:calc(100vh - 60px); }
-    .pane { border-right:1px solid #333; overflow-y:auto; padding:20px; }
-    .left-pane { width:280px; background:#111; }
-    .center-pane { flex:1; background:#0a0a0a; }
-    .right-pane { width:320px; background:#111; }
-    .nav-item { padding:14px 20px; cursor:pointer; font-size:18px; border-bottom:1px solid #222; }
-    .nav-item:hover, .nav-item.active { background:#222; }
-    .section { display:none; }
-    .section.active { display:block; }
-    .note { background:#1e1e1e; padding:12px; margin:12px 0; border-radius:8px; border:1px solid #333; }
-    .note .pubkey { color:#888; font-size:14px; margin-bottom:6px; }
-    .note .content { white-space:pre-wrap; word-break:break-word; }
-    .note .time { color:#666; font-size:12px; margin-top:8px; }
-    #login-screen { position:fixed; inset:0; background:rgba(0,0,0,0.9); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:1000; text-align:center; padding:20px; }
-    #login-screen.hidden { display:none; }
-    #main-content.hidden { display:none; }
-    .login-btn, .anon-btn { padding:12px 24px; font-size:18px; margin:10px; border:none; border-radius:6px; cursor:pointer; }
-    .login-btn { background:#0066cc; color:white; }
-    .anon-btn { background:#444; color:white; }
-    #user-info { font-size:16px; color:#4caf50; margin:10px 0; }
-    button.retry, button.refresh-profile { padding:10px 20px; background:#0066cc; color:white; border:none; border-radius:6px; cursor:pointer; margin:10px 0; }
-    input[type="text"], textarea { width:100%; padding:8px; margin:8px 0; background:#222; color:white; border:1px solid #444; }
-    label { margin:8px 0 4px; display:block; font-size:14px; color:#ccc; }
-    small { color:#888; display:block; margin-bottom:8px; }
-    .profile-field { margin:16px 0; font-size:16px; }
-    .profile-field strong { display:inline-block; width:220px; color:#aaa; }
-    #center-content { padding:20px; }
-    #feed-content, #profile-content { display:none; }
-    #feed-content.active, #profile-content.active { display:block; }
-    .back-btn { padding:10px 16px; background:#444; color:white; border:none; border-radius:6px; cursor:pointer; margin-bottom:20px; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: #f9f9f9;
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      color: #333;
+    }
+    header {
+      background: #2c3e50;
+      color: white;
+      padding: 16px;
+      text-align: center;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 8px 4px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+    button.primary   { background: #27ae60; color: white; }
+    button.primary:hover   { background: #219653; }
+    button.secondary { background: #3498db; color: white; }
+    button.secondary:hover { background: #2980b9; }
+    button.danger    { background: #e74c3c; color: white; }
+    #status { margin: 16px 0; color: #555; text-align: center; font-weight: bold; }
+    .feed {
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .note {
+      border-bottom: 1px solid #eee;
+      padding: 12px 0;
+    }
+    .note:last-child { border-bottom: none; }
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.65);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    .modal {
+      background: white;
+      border-radius: 12px;
+      width: 90%;
+      max-width: 520px;
+      max-height: 85vh;
+      overflow-y: auto;
+      padding: 24px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+      position: relative;
+    }
+    .close-btn {
+      position: absolute;
+      top: 12px; right: 16px;
+      font-size: 1.8rem;
+      cursor: pointer;
+      color: #999;
+    }
+    .close-btn:hover { color: #333; }
+    .relay-item {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 12px 0;
+      padding: 10px;
+      background: #f8f8f8;
+      border-radius: 6px;
+      border: 1px solid #ddd;
+    }
+    .relay-url { flex: 1 1 100%; word-break: break-all; font-family: monospace; font-size: 0.95rem; }
+    input[type="text"] { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; min-width: 180px; }
+    .rw-toggle { white-space: nowrap; font-size: 0.9rem; }
+    button.remove { background: #ff4d4d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+    .add-section { margin-top: 20px; display: flex; flex-wrap: wrap; gap: 8px; }
+    .actions { margin-top: 28px; text-align: right; }
+    #modalStatus { margin-top: 20px; padding: 12px; border-radius: 6px; text-align: center; font-weight: bold; }
+    #modalStatus.success { background: #e8f5e9; color: #2e7d32; }
+    #modalStatus.error   { background: #ffebee; color: #c62828; }
   </style>
-  <script>
-    let ws = null;
-    let userPubkey = null;
-    let subscriptionId = null;       // notes on primary
-    let contactsSubId = null;
-    let profileSubId = null;
-    let followsCount = 0;
-    let currentProfile = {};
-    let currentTags = [];
-    let currentView = 'feed';
-    let profileLoadTimeout = null;
-
-    async function fetchBitcoinPrice() {
-      try {
-        const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
-        const data = await res.json();
-        document.getElementById('btc-price').textContent = `$${data.bitcoin.usd.toLocaleString('en-US', {minimumFractionDigits: 0})}`;
-      } catch {}
-    }
-
-    function set200WMA() { document.getElementById('btc-200wma').textContent = '~$57849'; }
-
-    function loadSavedRelays() {
-      const primary = localStorage.getItem('friendzap-primary-relay') || 'wss://purplepag.es';
-      document.getElementById('primary-relay').value = primary;
-
-      const secondary = localStorage.getItem('friendzap-secondary-relay') || 'wss://relay.damus.io';
-      document.getElementById('secondary-relay').value = secondary;
-
-      const tertiary = localStorage.getItem('friendzap-tertiary-relay') || '';
-      document.getElementById('tertiary-relay').value = tertiary;
-    }
-
-    function saveRelays() {
-      const primary = document.getElementById('primary-relay').value.trim();
-      if (primary && primary.startsWith('wss://')) localStorage.setItem('friendzap-primary-relay', primary);
-
-      const secondary = document.getElementById('secondary-relay').value.trim();
-      if (secondary && secondary.startsWith('wss://')) localStorage.setItem('friendzap-secondary-relay', secondary);
-
-      const tertiary = document.getElementById('tertiary-relay').value.trim();
-      if (tertiary && tertiary.startsWith('wss://')) localStorage.setItem('friendzap-tertiary-relay', tertiary);
-      else localStorage.removeItem('friendzap-tertiary-relay');
-    }
-
-    function getPrimaryRelayUrl() {
-      let url = document.getElementById('primary-relay').value.trim();
-      if (!url || !url.startsWith('wss://')) url = 'wss://purplepag.es';
-      return url;
-    }
-
-    function getExtraRelayUrls() {
-      const urls = [];
-      const sec = document.getElementById('secondary-relay').value.trim();
-      if (sec && sec.startsWith('wss://')) urls.push(sec);
-      const tert = document.getElementById('tertiary-relay').value.trim();
-      if (tert && tert.startsWith('wss://')) urls.push(tert);
-      return urls;
-    }
-
-    function connectAndSubscribe() {
-      saveRelays();
-      const url = getPrimaryRelayUrl();
-      if (ws) ws.close();
-      ws = new WebSocket(url);
-
-      ws.onopen = () => {
-        document.getElementById('feed').innerHTML = '<p style="color:#4caf50; text-align:center;">Connected to primary relay – requesting notes...</p>';
-
-        subscriptionId = 'notes-' + Math.random().toString(36).substring(2,12);
-        const since = Math.floor(Date.now() / 1000) - 86400 * 30;
-        ws.send(JSON.stringify(["REQ", subscriptionId, {kinds:[1], since, limit:50}]));
-
-        if (userPubkey) {
-          contactsSubId = 'contacts-' + Math.random().toString(36).substring(2,12);
-          ws.send(JSON.stringify(["REQ", contactsSubId, {kinds:[3], authors:[userPubkey], limit:1}]));
-
-          profileSubId = 'profile-persist-' + Math.random().toString(36).substring(2,12);
-          ws.send(JSON.stringify(["REQ", profileSubId, {kinds:[0], authors:[userPubkey], limit:5}]));
-        }
-      };
-
-      ws.onmessage = (msgEvent) => {
-        const msg = JSON.parse(msgEvent.data);
-        if (msg[0] === 'EVENT') {
-          const event = msg[2];
-          if (event.kind === 1) {
-            renderNote(event);
-          } else if (event.kind === 3 && event.pubkey === userPubkey) {
-            const followed = event.tags.filter(t => t[0]==='p').map(t => t[1]);
-            followsCount = followed.length;
-            document.getElementById('follows-info').textContent = `You follow ${followsCount} people`;
-          } else if (event.kind === 0 && event.pubkey === userPubkey) {
-            try {
-              const parsed = JSON.parse(event.content || '{}');
-              if (!currentProfile.created_at || event.created_at > currentProfile.created_at) {
-                currentProfile = parsed;
-                currentProfile.created_at = event.created_at;
-                currentTags = event.tags || [];
-                if (currentView === 'profile') renderProfile();
-              }
-            } catch (e) { console.error('Bad profile JSON', e); }
-          }
-        } else if (msg[0] === 'EOSE') {
-          if (msg[1] === subscriptionId && document.querySelectorAll('.note').length === 0) {
-            document.getElementById('feed').innerHTML += '<p style="color:#ff9800; text-align:center;">No recent notes found</p>';
-          }
-          if (msg[1] === contactsSubId && followsCount === 0) {
-            document.getElementById('follows-info').textContent = 'No follows found';
-          }
-        }
-      };
-
-      ws.onerror = () => {
-        document.getElementById('feed').innerHTML = '<p style="color:red;">Connection error – check primary relay URL</p>';
-      };
-    }
-
-    function renderNote(event) {
-      const feed = document.getElementById('feed');
-      const short = event.pubkey.slice(0,8)+'…'+event.pubkey.slice(-8);
-      const time = new Date(event.created_at*1000).toLocaleString([],{hour:'2-digit',minute:'2-digit',month:'short',day:'numeric'});
-      const div = document.createElement('div');
-      div.className = 'note';
-      div.innerHTML = `<div class="pubkey">npub1${short}</div><div class="content">${escapeHtml(event.content)}</div><div class="time">${time}</div>`;
-      feed.insertBefore(div, feed.firstChild);
-    }
-
-    function escapeHtml(s) {
-      return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#039;'})[c]);
-    }
-
-    async function tryLogin() {
-      if (!window.nostr) { alert('No NIP-07 extension detected.'); return; }
-      try {
-        userPubkey = await window.nostr.getPublicKey();
-        const short = userPubkey.slice(0,8)+'…'+userPubkey.slice(-8);
-        document.getElementById('user-info').textContent = `Logged in as npub1${short}`;
-        document.getElementById('header').textContent = `Friendzap - npub1${short}`;
-        document.getElementById('login-screen').classList.add('hidden');
-        document.getElementById('main-content').classList.remove('hidden');
-        connectAndSubscribe();
-      } catch (err) { alert('Login failed: ' + err.message); }
-    }
-
-    function continueAnonymous() {
-      document.getElementById('login-screen').classList.add('hidden');
-      document.getElementById('main-content').classList.remove('hidden');
-      document.getElementById('header').textContent = 'Friendzap (Anonymous)';
-      connectAndSubscribe();
-    }
-
-    function logout() {
-      userPubkey = null; followsCount = 0; currentProfile = {}; currentTags = [];
-      document.getElementById('user-info').textContent = '';
-      document.getElementById('follows-info').textContent = '';
-      document.getElementById('header').textContent = 'Friendzap';
-      document.getElementById('login-screen').classList.remove('hidden');
-      document.getElementById('main-content').classList.add('hidden');
-      if (ws) ws.close();
-    }
-
-    function switchToFeed() {
-      currentView = 'feed';
-      document.getElementById('feed-content').classList.add('active');
-      document.getElementById('profile-content').classList.remove('active');
-      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-      document.querySelector('.nav-item[onclick*="feed"]').classList.add('active');
-      document.getElementById('center-header').textContent = 'Feed';
-    }
-
-    function switchToProfile() {
-      currentView = 'profile';
-      document.getElementById('feed-content').classList.remove('active');
-      document.getElementById('profile-content').classList.add('active');
-      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-      document.querySelector('.nav-item[onclick*="profile"]').classList.add('active');
-      document.getElementById('center-header').textContent = 'Your Profile';
-      if (userPubkey) fetchOwnProfile();
-      renderProfile();
-    }
-
-    function fetchOwnProfile() {
-      if (!ws || !userPubkey) return;
-      document.getElementById('view-name').textContent = '(loading from relays...)';
-
-      // Query primary WS (already connected)
-      const idMain = 'profile-main-' + Date.now();
-      ws.send(JSON.stringify(["REQ", idMain, {
-        kinds: [0],
-        authors: [userPubkey],
-        limit: 5,
-        since: Math.floor(Date.now()/1000) - 86400*730
-      }]));
-
-      // Extra parallel REQs to secondary + tertiary (sent via primary WS, as relays often forward)
-      const extras = getExtraRelayUrls();
-      extras.forEach((extraUrl, i) => {
-        const extraId = 'profile-extra-' + i + '-' + Date.now();
-        ws.send(JSON.stringify(["REQ", extraId, {
-          kinds: [0],
-          authors: [userPubkey],
-          limit: 3
-        }]));
-      });
-
-      clearTimeout(profileLoadTimeout);
-      profileLoadTimeout = setTimeout(() => {
-        if (Object.keys(currentProfile).length === 0) {
-          document.getElementById('view-name').textContent = '(not found)';
-          alert('Profile not loaded. Try adding wss://relay.nostr.band as tertiary relay or check your npub on nostr.band.');
-        }
-      }, 8000);
-    }
-
-    function renderProfile() {
-      document.getElementById('view-name').textContent = currentProfile.name || '(not set)';
-      document.getElementById('view-display-name').textContent = currentProfile.display_name || currentProfile.name || '(not set)';
-      document.getElementById('view-website').textContent = currentProfile.website || '(not set)';
-      document.getElementById('view-about').textContent = currentProfile.about || '(not set)';
-      document.getElementById('view-lud16').textContent = currentProfile.lud16 || '(not set)';
-      document.getElementById('view-nip05').textContent = currentProfile.nip05 || '(not set)';
-
-      const geohashTag = currentTags.find(t => t[0] === 'g');
-      const isSharing = !!geohashTag;
-      document.getElementById('view-location-status').textContent = isSharing
-        ? `Sharing approximate location (geohash: ${geohashTag[1]})`
-        : 'Not sharing location (private by default)';
-
-      document.querySelector(`input[name="share-location"][value="${isSharing ? 'yes' : 'no'}"]`).checked = true;
-      clearTimeout(profileLoadTimeout);
-    }
-
-    async function saveLocation() {
-      if (!userPubkey || !window.nostr) { alert('Must be logged in with NIP-07.'); return; }
-      const share = document.querySelector('input[name="share-location"]:checked').value === 'yes';
-      let newContent = { ...currentProfile };
-      let newTags = currentTags.filter(t => t[0] !== 'g');
-
-      if (share) {
-        const geohash = '9q8y'; // placeholder – next step: real geohash from browser location
-        newContent.location = 'Approximate area shared';
-        newTags.push(['g', geohash]);
-      } else {
-        delete newContent.location;
-      }
-
-      const event = {
-        kind: 0,
-        content: JSON.stringify(newContent),
-        tags: newTags,
-        created_at: Math.floor(Date.now() / 1000),
-        pubkey: userPubkey
-      };
-
-      try {
-        event.id = nostrTools.getEventHash(event);
-        event.sig = await window.nostr.signEvent(event);
-        ws.send(JSON.stringify(['EVENT', event]));
-        alert('Published to primary relay! Refreshing profile...');
-        setTimeout(fetchOwnProfile, 3000);
-      } catch (err) { alert('Publish failed: ' + err.message); }
-    }
-
-    window.addEventListener('load', () => {
-      loadSavedRelays();
-      fetchBitcoinPrice();
-      set200WMA();
-      setInterval(fetchBitcoinPrice, 60000);
-      document.getElementById('login-screen').classList.remove('hidden');
-    });
-  </script>
 </head>
 <body>
 
-  <div id="login-screen">
-    <h1>Friendzap</h1>
-    <p>Connect with Alby or browse anonymously.</p>
-    <button class="login-btn" onclick="tryLogin()">Connect with Alby</button>
-    <button class="anon-btn" onclick="continueAnonymous()">Continue Anonymously</button>
-    <p style="font-size:14px; color:#aaa;">Wait 10–60 seconds for notes. Relays saved automatically.</p>
+<header>
+  <h1>Friendzap - Your Nostr Notes</h1>
+  <button class="primary" id="loginBtn">Login with Alby</button>
+  <button class="secondary" id="settingsBtn" disabled>Relay Settings</button>
+  <div id="status">Ready – Login to see your notes & profile</div>
+</header>
+
+<div class="container">
+  <div id="profile" style="margin-bottom: 24px; text-align: center;">
+    <img id="profilePic" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover;" src="https://via.placeholder.com/80?text=Profile" alt="Profile">
+    <h2 id="profileName">Your Profile</h2>
+    <p id="profileBio"></p>
   </div>
 
-  <div id="main-content" class="hidden">
-    <div id="header">Friendzap</div>
-    <div class="container">
-      <div class="pane left-pane">
-        <div id="user-info"></div>
-        <div id="follows-info"></div>
-        <div class="nav-item active" onclick="switchToFeed()">Home / Feed</div>
-        <div class="nav-item" onclick="switchToProfile()">Profile</div>
-        <div class="nav-item" onclick="document.getElementById('settings').classList.toggle('active');">Settings</div>
+  <div class="feed" id="feed">
+    <p>Login to load your notes...</p>
+  </div>
+</div>
 
-        <div id="settings" class="section" style="display:none; padding:20px;">
-          <h3>Network Settings</h3>
-          <label>Primary Relay (main connection):</label>
-          <input type="text" id="primary-relay" value="wss://purplepag.es"/>
-          <small>Default: purplepag.es (great for profiles)</small>
+<!-- Relay Settings Modal -->
+<div id="settingsModal" class="modal-overlay">
+  <div class="modal">
+    <span class="close-btn" onclick="document.getElementById('settingsModal').style.display='none'">&times;</span>
+    <h2>Relay Settings</h2>
+    <p>Manage your preferred relays (publishes kind 10002 via Alby).<br>Clients should respect this list for your data.</p>
 
-          <label>Secondary Relay:</label>
-          <input type="text" id="secondary-relay" value="wss://relay.damus.io"/>
-          <small>Default: relay.damus.io (general notes)</small>
+    <div id="relayList"></div>
 
-          <label>Tertiary / Extra Relay (optional):</label>
-          <input type="text" id="tertiary-relay" placeholder="e.g. wss://relay.nostr.band"/>
-          <small>Add for better profile/search coverage (e.g. nostr.band)</small>
-
-          <button onclick="connectAndSubscribe()" class="retry" style="margin-top:16px;">Save Relays & Reconnect</button>
-          <button onclick="logout()" style="padding:10px 20px; background:#cc0000; color:white; border:none; border-radius:4px; cursor:pointer; margin:10px 0 0 10px;">Disconnect</button>
-        </div>
-      </div>
-
-      <div class="pane center-pane" id="center-content">
-        <h2 id="center-header">Feed</h2>
-
-        <div id="feed-content" class="active">
-          <div id="feed"><p style="color:#666; text-align:center; margin-top:100px;">Feed loading from primary relay...</p></div>
-          <button class="retry" onclick="connectAndSubscribe()">Retry / Refresh Feed</button>
-        </div>
-
-        <div id="profile-content">
-          <button class="back-btn" onclick="switchToFeed()">← Back to Feed</button>
-          <button class="refresh-profile" onclick="fetchOwnProfile()">Refresh Profile Data</button>
-
-          <div class="profile-field"><strong>Username / Name:</strong> <span id="view-name">(loading...)</span></div>
-          <div class="profile-field"><strong>Display Name:</strong> <span id="view-display-name">(loading...)</span></div>
-          <div class="profile-field"><strong>Website:</strong> <span id="view-website">(loading...)</span></div>
-          <div class="profile-field"><strong>About Me:</strong> <span id="view-about">(loading...)</span></div>
-          <div class="profile-field"><strong>Bitcoin Lightning Address (lud16):</strong> <span id="view-lud16">(loading...)</span></div>
-          <div class="profile-field"><strong>NIP-05 Verified:</strong> <span id="view-nip05">(loading...)</span></div>
-
-          <h3>GeoLocation (Approximate Area)</h3>
-          <p id="view-location-status">Loading...</p>
-
-          <button onclick="document.getElementById('location-edit').style.display='block';">Edit Location</button>
-
-          <div id="location-edit" style="display:none; margin-top:16px;">
-            <label><input type="radio" name="share-location" value="no" checked> Do not share location</label>
-            <label><input type="radio" name="share-location" value="yes"> Share approximate location</label>
-            <p><small>Note: Enabling adds a coarse public geohash to your kind 0 profile (visible on relays like purplepag.es). Use carefully — it's permanent.</small></p>
-            <button onclick="saveLocation()" style="padding:10px 20px; background:#0066cc; color:white; border:none; border-radius:4px; cursor:pointer; margin-top:12px;">Save Location Settings</button>
-          </div>
-
-          <p style="margin-top:40px;"><small>Profile loads from multiple relays for better reliability. If still not showing, check your npub on https://nostr.band or https://purplepag.es.</small></p>
-        </div>
-      </div>
-
-      <div class="pane right-pane">
-        <div style="background:#1e1e1e; padding:20px; margin-bottom:20px; border-radius:8px; text-align:center;">
-          <h2>Bitcoin Price</h2>
-          <div id="btc-price" style="font-size:32px; font-weight:bold; color:#f7931a;">Loading...</div>
-        </div>
-        <div style="background:#1e1e1e; padding:20px; border-radius:8px; text-align:center;">
-          <h2>Bitcoin 200-Week MA</h2>
-          <div id="btc-200wma" style="font-size:32px; font-weight:bold; color:#f7931a;">~$57849</div>
-        </div>
-      </div>
+    <div class="add-section">
+      <input type="text" id="newRelay" placeholder="wss://relay.example.com" />
+      <label class="rw-toggle"><input type="checkbox" id="newRead" checked> Read</label>
+      <label class="rw-toggle"><input type="checkbox" id="newWrite" checked> Write</label>
+      <button onclick="addRelay()">Add</button>
     </div>
-  </div>
 
+    <div class="actions">
+      <button class="secondary" onclick="resetDefaults()">Reset Defaults</button>
+      <button class="primary" onclick="publishRelays()">Save & Publish</button>
+    </div>
+
+    <div id="modalStatus"></div>
+  </div>
+</div>
+
+<script>
+// ────────────────────────────────────────────────
+// Default relays (popular & reliable)
+let relays = [
+  { url: "wss://relay.damus.io",        read: true,  write: true  },
+  { url: "wss://nos.lol",               read: true,  write: true  },
+  { url: "wss://nostr-pub.wellorder.net", read: true,  write: false },
+  { url: "wss://relay.nostr.band",      read: true,  write: true  },
+  { url: "wss://purplepag.es",          read: true,  write: false }
+];
+
+let pubkey = null;
+
+// ────────────────────────────────────────────────
+// Render relays inside modal
+function renderRelays() {
+  const list = document.getElementById('relayList');
+  list.innerHTML = '';
+  relays.forEach((r, i) => {
+    const div = document.createElement('div');
+    div.className = 'relay-item';
+    div.innerHTML = `
+      <span class="relay-url">${r.url}</span>
+      <label class="rw-toggle"><input type="checkbox" ${r.read?'checked':''} onchange="relays[${i}].read=this.checked"> Read</label>
+      <label class="rw-toggle"><input type="checkbox" ${r.write?'checked':''} onchange="relays[${i}].write=this.checked"> Write</label>
+      <button class="remove" onclick="relays.splice(${i},1);renderRelays();">Remove</button>
+    `;
+    list.appendChild(div);
+  });
+}
+
+// Add new relay
+function addRelay() {
+  const url = document.getElementById('newRelay').value.trim();
+  if (!url.startsWith('ws')) return alert('Valid wss:// or ws:// URL required');
+  relays.push({
+    url,
+    read: document.getElementById('newRead').checked,
+    write: document.getElementById('newWrite').checked
+  });
+  renderRelays();
+  document.getElementById('newRelay').value = '';
+}
+
+// Reset defaults
+function resetDefaults() {
+  if (confirm('Reset to default relays?')) {
+    relays = [
+      { url: "wss://relay.damus.io", read: true, write: true },
+      { url: "wss://nos.lol", read: true, write: true },
+      { url: "wss://nostr-pub.wellorder.net", read: true, write: false },
+      { url: "wss://relay.nostr.band", read: true, write: true },
+      { url: "wss://purplepag.es", read: true, write: false }
+    ];
+    renderRelays();
+  }
+}
+
+// Publish kind 10002 using nostr-tools (manual publish)
+async function publishRelays() {
+  const status = document.getElementById('modalStatus');
+  status.textContent = 'Publishing...';
+  status.className = '';
+
+  if (!window.nostr) {
+    status.textContent = 'No Nostr extension (Alby) detected.';
+    status.className = 'error';
+    return;
+  }
+
+  try {
+    pubkey = await window.nostr.getPublicKey();
+
+    const event = {
+      kind: 10002,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: relays.map(r => {
+        const tag = ["r", r.url];
+        if (r.read && !r.write) tag.push("read");
+        if (r.write && !r.read) tag.push("write");
+        return tag;
+      }),
+      content: "",
+      pubkey
+    };
+
+    const signed = await window.nostr.signEvent(event);
+
+    // Publish to several reliable relays
+    const publishUrls = [
+      'wss://relay.damus.io',
+      'wss://nos.lol',
+      'wss://nostr-pub.wellorder.net',
+      'wss://relay.nostr.band'
+    ];
+
+    let successCount = 0;
+
+    for (const url of publishUrls) {
+      try {
+        const relay = NostrTools.relayInit(url);
+        await relay.connect();
+        await relay.publish(signed);
+        relay.close();
+        successCount++;
+      } catch (err) {
+        console.warn(`Publish failed on ${url}:`, err);
+      }
+    }
+
+    if (successCount > 0) {
+      status.textContent = `Success! Published to ${successCount} relay(s). Refresh clients in 10–60s.`;
+      status.className = 'success';
+    } else {
+      status.textContent = 'Failed to publish — check console.';
+      status.className = 'error';
+    }
+  } catch (err) {
+    status.textContent = 'Error: ' + (err.message || 'Sign/publish failed');
+    status.className = 'error';
+    console.error(err);
+  }
+}
+
+// ────────────────────────────────────────────────
+// Login
+document.getElementById('loginBtn').onclick = async () => {
+  if (!window.nostr) {
+    document.getElementById('status').textContent = 'No Alby extension found. Install/enable Alby.';
+    return;
+  }
+
+  try {
+    pubkey = await window.nostr.getPublicKey();
+    document.getElementById('status').textContent = 'Logged in as ' + pubkey.slice(0,10) + '...';
+    document.getElementById('settingsBtn').disabled = false;
+
+    loadProfile();
+    loadNotes();
+  } catch (err) {
+    document.getElementById('status').textContent = 'Login failed: ' + err.message;
+  }
+};
+
+// Open relay settings modal
+document.getElementById('settingsBtn').onclick = () => {
+  document.getElementById('settingsModal').style.display = 'flex';
+  renderRelays();
+};
+
+// Basic profile load (kind 0)
+async function loadProfile() {
+  if (!pubkey) return;
+  const relay = NostrTools.relayInit('wss://relay.damus.io');
+  await relay.connect();
+  const sub = relay.sub([{ kinds: [0], authors: [pubkey], limit: 1 }]);
+  sub.on('event', e => {
+    try {
+      const m = JSON.parse(e.content);
+      document.getElementById('profileName').textContent = m.name || 'Anonymous';
+      document.getElementById('profileBio').textContent = m.about || '';
+      if (m.picture) document.getElementById('profilePic').src = m.picture;
+    } catch {}
+  });
+}
+
+// Basic notes load (kind 1 example)
+async function loadNotes() {
+  const feed = document.getElementById('feed');
+  feed.innerHTML = '<p>Loading notes...</p>';
+  const relay = NostrTools.relayInit('wss://relay.damus.io');
+  await relay.connect();
+  const sub = relay.sub([{ kinds: [1], limit: 10 }]);
+  sub.on('event', e => {
+    const div = document.createElement('div');
+    div.className = 'note';
+    div.innerHTML = `<strong>${e.pubkey.slice(0,10)}...</strong><p>${e.content}</p>`;
+    feed.appendChild(div);
+  });
+  sub.on('eose', () => {
+    if (feed.children.length <= 1) feed.innerHTML = '<p>No recent notes.</p>';
+  });
+}
+</script>
 </body>
 </html>
