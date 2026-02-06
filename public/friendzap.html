@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Friendzap - Simple Nostr Client</title>
 
-  <!-- nostr-tools -->
-  <script src="https://unpkg.com/nostr-tools@2.11.0/lib/nostr.bundle.js"></script>
+  <!-- Use esm.sh for reliable nostr-tools exports -->
+  <script src="https://esm.sh/nostr-tools@2.11.0"></script>
 
   <style>
     body {
@@ -313,6 +313,7 @@ async function loadProfile() {
   );
 
   sub.on('event', e => {
+    console.log('Profile event received:', e);
     try {
       const m = JSON.parse(e.content);
       document.getElementById('profileName').textContent = m.name || 'Anonymous';
@@ -328,7 +329,7 @@ async function loadProfile() {
     sub.close();
   });
 
-  // Timeout cleanup
+  // Safety cleanup
   setTimeout(() => {
     sub.close();
   }, 15000);
@@ -349,6 +350,7 @@ async function loadNotes() {
 
   sub.on('event', e => {
     eventCount++;
+    console.log('Note event received:', e);
     const div = document.createElement('div');
     div.className = 'note';
     div.innerHTML = `<strong>${e.pubkey.slice(0,10)}...</strong><p>${e.content.substring(0, 200)}${e.content.length > 200 ? '...' : ''}</p>`;
@@ -356,17 +358,17 @@ async function loadNotes() {
   });
 
   sub.on('eose', () => {
-    console.log('Notes EOSE reached - events:', eventCount);
+    console.log('Notes EOSE reached - total events:', eventCount);
     if (eventCount === 0) {
       feed.innerHTML = '<p>No recent notes found on these relays.</p>';
     }
     sub.close();
   });
 
-  // Timeout fallback
+  // Safety cleanup
   setTimeout(() => {
     if (eventCount === 0) {
-      feed.innerHTML = '<p>No notes loaded (timeout or no data). Try different relays or publish a test note.</p>';
+      feed.innerHTML = '<p>No notes loaded (timeout or no data). Try publishing a test note.</p>';
     }
     sub.close();
   }, 15000);
