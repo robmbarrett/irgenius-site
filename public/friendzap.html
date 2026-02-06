@@ -299,7 +299,7 @@ document.getElementById('settingsBtn').onclick = () => {
   renderRelays();
 };
 
-// Load profile (kind 0) using SimplePool
+// Load profile (kind 0) using SimplePool iterator
 async function loadProfile() {
   if (!pubkey) {
     document.getElementById('profileName').textContent = 'Not logged in';
@@ -312,21 +312,23 @@ async function loadProfile() {
     [{ kinds: [0], authors: [pubkey], limit: 1 }]
   );
 
-  sub.on('event', e => {
-    try {
-      const m = JSON.parse(e.content);
-      document.getElementById('profileName').textContent = m.name || 'Anonymous';
-      document.getElementById('profileBio').textContent = m.about || '';
-      if (m.picture) document.getElementById('profilePic').src = m.picture;
-    } catch (err) {
-      console.error('Profile parse error:', err);
+  try {
+    for await (const e of sub) {
+      try {
+        const m = JSON.parse(e.content);
+        document.getElementById('profileName').textContent = m.name || 'Anonymous';
+        document.getElementById('profileBio').textContent = m.about || '';
+        if (m.picture) document.getElementById('profilePic').src = m.picture;
+      } catch (err) {
+        console.error('Profile parse error:', err);
+      }
     }
-  });
-
-  sub.on('eose', () => sub.close());
+  } catch (err) {
+    console.error('Profile subscription error:', err);
+  }
 }
 
-// Load notes (kind 1 example) using SimplePool
+// Load notes (kind 1 example) using SimplePool iterator
 async function loadNotes() {
   const feed = document.getElementById('feed');
   feed.innerHTML = '<p>Loading notes...</p>';
@@ -337,17 +339,19 @@ async function loadNotes() {
     [{ kinds: [1], limit: 10 }]
   );
 
-  sub.on('event', e => {
-    const div = document.createElement('div');
-    div.className = 'note';
-    div.innerHTML = `<strong>${e.pubkey.slice(0,10)}...</strong><p>${e.content}</p>`;
-    feed.appendChild(div);
-  });
+  try {
+    for await (const e of sub) {
+      const div = document.createElement('div');
+      div.className = 'note';
+      div.innerHTML = `<strong>${e.pubkey.slice(0,10)}...</strong><p>${e.content}</p>`;
+      feed.appendChild(div);
+    }
 
-  sub.on('eose', () => {
-    if (feed.children.length <= 1) feed.innerHTML = '<p>No recent notes found.</p>';
-    sub.close();
-  });
+    feed.innerHTML = feed.children.length > 1 ? '' : '<p>No recent notes found.</p>';
+  } catch (err) {
+    console.error('Notes subscription error:', err);
+    feed.innerHTML = '<p>Error loading notes.</p>';
+  }
 }
 </script>
 </body>
