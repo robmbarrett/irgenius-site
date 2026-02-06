@@ -159,4 +159,218 @@ let relays = [
   { url: "wss://relay.damus.io",        read: true,  write: true  },
   { url: "wss://nos.lol",               read: true,  write: true  },
   { url: "wss://nostr-pub.wellorder.net", read: true,  write: false },
-  { url: "w
+  { url: "wss://relay.nostr.band",      read: true,  write: true  },
+  { url: "wss://purplepag.es",          read: true,  write: false }
+];
+
+let pubkey = null;
+let pool = new NostrTools.SimplePool();
+
+// Render relays in modal
+function renderRelays() {
+  const list = document.getElementById('relayList');
+  list.innerHTML = '';
+  relays.forEach((r, i) => {
+    const div = document.createElement('div');
+    div.className = 'relay-item';
+    div.innerHTML = `
+      <span class="relay-url">${r.url}</span>
+      <label class="rw-toggle"><input type="checkbox" ${r.read?'checked':''} onchange="relays[${i}].read=this.checked"> Read</label>
+      <label class="rw-toggle"><input type="checkbox" ${r.write?'checked':''} onchange="relays[${i}].write=this.checked"> Write</label>
+      <button class="remove" onclick="relays.splice(${i},1);renderRelays();">Remove</button>
+    `;
+    list.appendChild(div);
+  });
+}
+
+// Add new relay
+function addRelay() {
+  const url = document.getElementById('newRelay').value.trim();
+  if (!url.startsWith('ws')) return alert('Valid wss:// or ws:// URL required');
+  relays.push({
+    url,
+    read: document.getElementById('newRead').checked,
+    write: document.getElementById('newWrite').checked
+  });
+  renderRelays();
+  document.getElementById('newRelay').value = '';
+}
+
+// Reset defaults
+function resetDefaults() {
+  if (confirm('Reset to default relays?')) {
+    relays = [
+      { url: "wss://relay.damus.io", read: true, write: true },
+      { url: "wss://nos.lol", read: true, write: true },
+      { url: "wss://nostr-pub.wellorder.net", read: true, write: false },
+      { url: "wss://relay.nostr.band", read: true, write: true },
+      { url: "wss://purplepag.es", read: true, write: false }
+    ];
+    renderRelays();
+  }
+}
+
+// Publish kind 10002
+async function publishRelays() {
+  const status = document.getElementById('modalStatus');
+  status.textContent = 'Publishing...';
+  status.className = '';
+
+  if (!window.nostr) {
+    status.textContent = 'No Nostr extension (Alby) detected.';
+    status.className = 'error';
+    return;
+  }
+
+  try {
+    pubkey = await window.nostr.getPublicKey();
+
+    const event = {
+      kind: 10002,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: relays.map(r => {
+        const tag = ["r", r.url];
+        if (r.read && !r.write) tag.push("read");
+        if (r.write && !r.read) tag.push("write");
+        return tag;
+      }),
+      content: "",
+      pubkey
+    };
+
+    const signed = await window.nostr.signEvent(event);
+
+    const publishUrls = [
+      'wss://relay.damus.io',
+      'wss://nos.lol',
+      'wss://nostr-pub.wellorder.net',
+      'wss://relay.nostr.band'
+    ];
+
+    let successCount = 0;
+
+    for (const url of publishUrls) {
+      try {
+        const relay = await NostrTools.Relay.connect(url);
+        await relay.publish(signed);
+        relay.close();
+        successCount++;
+      } catch (err) {
+        console.warn(`Publish failed on ${url}:`, err);
+      }
+    }
+
+    if (successCount > 0) {
+      status.textContent = `Success! Published to ${successCount} relay(s). Refresh clients.`;
+      status.className = 'success';
+    } else {
+      status.textContent = 'Failed to publish — check console.';
+      status.className = 'error';
+    }
+  } catch (err) {
+    status.textContent = 'Error: ' + (err.message || 'Sign/publish failed');
+    status.className = 'error';
+    console.error(err);
+  }
+}
+
+// Login
+document.getElementById('loginBtn').onclick = async () => {
+  if (!window.nostr) {
+    document.getElementById('status').textContent = 'No Alby extension found. Install/enable Alby.';
+    return;
+  }
+
+  try {
+    pubkey = await window.nostr.getPublicKey();
+    document.getElementById('status').textContent = 'Logged in as ' + pubkey.slice(0,10) + '...';
+    document.getElementById('settingsBtn').disabled = false;
+
+    loadProfile();
+    loadNotes();
+  } catch (err) {
+    document.getElementById('status').textContent = 'Login failed: ' + err.message;
+  }
+};
+
+// Open relay settings
+document.getElementById('settingsBtn').onclick = () => {
+  document.getElementById('settingsModal').style.display = 'flex';
+  renderRelays();
+};
+
+// Load profile (kind 0)
+async function loadProfile() {
+  if (!pubkey) {
+    document.getElementById('profileName').textContent = 'Not logged in';
+    return;
+  }
+
+  const pool = new NostrTools.SimplePool();
+  const sub = pool.subscribeMany(
+    relays.filter(r => r.read).map(r => r.url),
+    [{ kinds: [0], authors: [pubkey], limit: 1 }]
+  );
+
+  sub.on('event', e => {
+    try {
+      const m = JSON.parse(e.content);
+      document.getElementById('profileName').textContent = m.name || 'Anonymous';
+      document.getElementById('profileBio').textContent = m.about || '';
+      if (m.picture) document.getElementById('profilePic').src = m.picture;
+    } catch (err) {
+      console.error('Profile parse error:', err);
+    }
+  });
+
+  sub.on('eose', () => {
+    console.log('Profile EOSE reached');
+    sub.close();
+  });
+
+  // Timeout cleanup
+  setTimeout(() => {
+    sub.close();
+  }, 15000);
+}
+
+// Load notes (kind 1 example)
+async function loadNotes() {
+  const feed = document.getElementById('feed');
+  feed.innerHTML = '<p>Loading notes...</p>';
+
+  const pool = new NostrTools.SimplePool();
+  const sub = pool.subscribeMany(
+    relays.filter(r => r.read).map(r => r.url),
+    [{ kinds: [1], limit: 10 }]
+  );
+
+  let eventCount = 0;
+
+  sub.on('event', e => {
+    eventCount++;
+    const div = document.createElement('div');
+    div.className = 'note';
+    div.innerHTML = `<strong>${e.pubkey.slice(0,10)}...</strong><p>${e.content.substring(0, 200)}${e.content.length > 200 ? '...' : ''}</p>`;
+    feed.appendChild(div);
+  });
+
+  sub.on('eose', () => {
+    console.log('Notes EOSE reached - events:', eventCount);
+    if (eventCount === 0) {
+      feed.innerHTML = '<p>No recent notes found on these relays.</p>';
+    }
+    sub.close();
+  });
+
+  // Timeout fallback
+  setTimeout(() => {
+    if (eventCount === 0) {
+      feed.innerHTML = '<p>No notes loaded (timeout or no data). Try different relays or publish a test note.</p>';
+    }
+    sub.close();
+  }, 15000);
+}
+</script>
+</body>
+</html>
