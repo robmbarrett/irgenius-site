@@ -118,7 +118,7 @@
 
 <div class="container">
   <div id="profile" style="margin-bottom: 24px; text-align: center;">
-    <img id="profilePic" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover;" src="https://via.placeholder.com/80?text=Profile" alt="Profile">
+    <img id="profilePic" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover;" src="https://placehold.co/80x80/ccc/333?text=Profile" alt="Profile">
     <h2 id="profileName">Your Profile</h2>
     <p id="profileBio"></p>
   </div>
@@ -216,4 +216,139 @@ async function publishRelays() {
   status.textContent = 'Publishing...';
   status.className = '';
 
-  if (!window.nostr
+  if (!window.nostr) {
+    status.textContent = 'No Nostr extension (Alby) detected.';
+    status.className = 'error';
+    return;
+  }
+
+  try {
+    pubkey = await window.nostr.getPublicKey();
+
+    const event = {
+      kind: 10002,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: relays.map(r => {
+        const tag = ["r", r.url];
+        if (r.read && !r.write) tag.push("read");
+        if (r.write && !r.read) tag.push("write");
+        return tag;
+      }),
+      content: "",
+      pubkey
+    };
+
+    const signed = await window.nostr.signEvent(event);
+
+    const publishUrls = [
+      'wss://relay.damus.io',
+      'wss://nos.lol',
+      'wss://nostr-pub.wellorder.net',
+      'wss://relay.nostr.band'
+    ];
+
+    let successCount = 0;
+
+    for (const url of publishUrls) {
+      try {
+        const relay = await NostrTools.Relay.connect(url);
+        await relay.publish(signed);
+        relay.close();
+        successCount++;
+      } catch (err) {
+        console.warn(`Publish failed on ${url}:`, err);
+      }
+    }
+
+    if (successCount > 0) {
+      status.textContent = `Success! Published to ${successCount} relay(s). Refresh clients.`;
+      status.className = 'success';
+    } else {
+      status.textContent = 'Failed to publish — check console.';
+      status.className = 'error';
+    }
+  } catch (err) {
+    status.textContent = 'Error: ' + (err.message || 'Sign/publish failed');
+    status.className = 'error';
+    console.error(err);
+  }
+}
+
+// Login
+document.getElementById('loginBtn').onclick = async () => {
+  if (!window.nostr) {
+    document.getElementById('status').textContent = 'No Alby extension found. Install/enable Alby.';
+    return;
+  }
+
+  try {
+    pubkey = await window.nostr.getPublicKey();
+    document.getElementById('status').textContent = 'Logged in as ' + pubkey.slice(0,10) + '...';
+    document.getElementById('settingsBtn').disabled = false;
+
+    loadProfile();
+    loadNotes();
+  } catch (err) {
+    document.getElementById('status').textContent = 'Login failed: ' + err.message;
+  }
+};
+
+// Open relay settings
+document.getElementById('settingsBtn').onclick = () => {
+  document.getElementById('settingsModal').style.display = 'flex';
+  renderRelays();
+};
+
+// Load profile (kind 0) using SimplePool
+async function loadProfile() {
+  if (!pubkey) {
+    document.getElementById('profileName').textContent = 'Not logged in';
+    return;
+  }
+
+  const pool = new NostrTools.SimplePool();
+  const sub = pool.subscribeMany(
+    relays.filter(r => r.read).map(r => r.url),
+    [{ kinds: [0], authors: [pubkey], limit: 1 }]
+  );
+
+  sub.on('event', e => {
+    try {
+      const m = JSON.parse(e.content);
+      document.getElementById('profileName').textContent = m.name || 'Anonymous';
+      document.getElementById('profileBio').textContent = m.about || '';
+      if (m.picture) document.getElementById('profilePic').src = m.picture;
+    } catch (err) {
+      console.error('Profile parse error:', err);
+    }
+  });
+
+  sub.on('eose', () => sub.close());
+}
+
+// Load notes (kind 1 example) using SimplePool
+async function loadNotes() {
+  const feed = document.getElementById('feed');
+  feed.innerHTML = '<p>Loading notes...</p>';
+
+  const pool = new NostrTools.SimplePool();
+  const sub = pool.subscribeMany(
+    relays.filter(r => r.read).map(r => r.url),
+    [{ kinds: [1], limit: 10 }]
+  );
+
+  sub.on('event', e => {
+    const div = document.createElement('div');
+    div.className = 'note';
+    div.innerHTML = `<strong>${e.pubkey.slice(0,10)}...</strong><p>${e.content}</p>`;
+    feed.appendChild(div);
+  });
+
+  sub.on('eose', () => {
+    if (feed.children.length <= 1) feed.innerHTML = '<p>No recent notes found.</p>';
+    sub.close();
+  });
+}
+</script>
+</body>
+</html>
