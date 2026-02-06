@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Friendzap - Simple Nostr Client</title>
 
-  <!-- nostr-tools -->
+  <!-- nostr-tools (using a path known to export SimplePool correctly) -->
   <script src="https://unpkg.com/nostr-tools@2.11.0/lib/nostr.bundle.js"></script>
 
   <style>
@@ -299,7 +299,7 @@ document.getElementById('settingsBtn').onclick = () => {
   renderRelays();
 };
 
-// Load profile (kind 0) using SimplePool iterator
+// Load profile (kind 0) using SimplePool with callback style
 async function loadProfile() {
   if (!pubkey) {
     document.getElementById('profileName').textContent = 'Not logged in';
@@ -312,23 +312,26 @@ async function loadProfile() {
     [{ kinds: [0], authors: [pubkey], limit: 1 }]
   );
 
-  try {
-    for await (const e of sub) {
-      try {
-        const m = JSON.parse(e.content);
-        document.getElementById('profileName').textContent = m.name || 'Anonymous';
-        document.getElementById('profileBio').textContent = m.about || '';
-        if (m.picture) document.getElementById('profilePic').src = m.picture;
-      } catch (err) {
-        console.error('Profile parse error:', err);
-      }
+  sub.on('event', e => {
+    try {
+      const m = JSON.parse(e.content);
+      document.getElementById('profileName').textContent = m.name || 'Anonymous';
+      document.getElementById('profileBio').textContent = m.about || '';
+      if (m.picture) document.getElementById('profilePic').src = m.picture;
+    } catch (err) {
+      console.error('Profile parse error:', err);
     }
-  } catch (err) {
-    console.error('Profile subscription error:', err);
-  }
+  });
+
+  sub.on('eose', () => {
+    sub.close();
+  });
+
+  // Safety timeout
+  setTimeout(() => sub.close(), 15000);
 }
 
-// Load notes (kind 1 example) using SimplePool iterator
+// Load notes (kind 1 example) using SimplePool with callback style
 async function loadNotes() {
   const feed = document.getElementById('feed');
   feed.innerHTML = '<p>Loading notes...</p>';
@@ -339,19 +342,20 @@ async function loadNotes() {
     [{ kinds: [1], limit: 10 }]
   );
 
-  try {
-    for await (const e of sub) {
-      const div = document.createElement('div');
-      div.className = 'note';
-      div.innerHTML = `<strong>${e.pubkey.slice(0,10)}...</strong><p>${e.content}</p>`;
-      feed.appendChild(div);
-    }
+  sub.on('event', e => {
+    const div = document.createElement('div');
+    div.className = 'note';
+    div.innerHTML = `<strong>${e.pubkey.slice(0,10)}...</strong><p>${e.content}</p>`;
+    feed.appendChild(div);
+  });
 
-    feed.innerHTML = feed.children.length > 1 ? '' : '<p>No recent notes found.</p>';
-  } catch (err) {
-    console.error('Notes subscription error:', err);
-    feed.innerHTML = '<p>Error loading notes.</p>';
-  }
+  sub.on('eose', () => {
+    if (feed.children.length <= 1) feed.innerHTML = '<p>No recent notes found.</p>';
+    sub.close();
+  });
+
+  // Safety timeout
+  setTimeout(() => sub.close(), 30000);
 }
 </script>
 </body>
