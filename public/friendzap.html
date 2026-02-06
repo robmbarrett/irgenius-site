@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Friendzap - Simple Nostr Client</title>
 
-  <!-- Use esm.sh for reliable nostr-tools exports -->
+  <!-- Use esm.sh for reliable nostr-tools (fixes export issues) -->
   <script src="https://esm.sh/nostr-tools@2.11.0"></script>
 
   <style>
@@ -154,7 +154,7 @@
 </div>
 
 <script>
-// Default relays
+// Default relays (only read-enabled ones used for loading)
 let relays = [
   { url: "wss://relay.damus.io",        read: true,  write: true  },
   { url: "wss://nos.lol",               read: true,  write: true  },
@@ -299,7 +299,7 @@ document.getElementById('settingsBtn').onclick = () => {
   renderRelays();
 };
 
-// Load profile (kind 0)
+// Load profile (kind 0) - using for await...of (async iterator)
 async function loadProfile() {
   if (!pubkey) {
     document.getElementById('profileName').textContent = 'Not logged in';
@@ -312,30 +312,26 @@ async function loadProfile() {
     [{ kinds: [0], authors: [pubkey], limit: 1 }]
   );
 
-  sub.on('event', e => {
-    console.log('Profile event received:', e);
-    try {
-      const m = JSON.parse(e.content);
-      document.getElementById('profileName').textContent = m.name || 'Anonymous';
-      document.getElementById('profileBio').textContent = m.about || '';
-      if (m.picture) document.getElementById('profilePic').src = m.picture;
-    } catch (err) {
-      console.error('Profile parse error:', err);
+  try {
+    console.log('Starting profile subscription...');
+    for await (const e of sub) {
+      console.log('Profile event received:', e);
+      try {
+        const m = JSON.parse(e.content);
+        document.getElementById('profileName').textContent = m.name || 'Anonymous';
+        document.getElementById('profileBio').textContent = m.about || '';
+        if (m.picture) document.getElementById('profilePic').src = m.picture;
+      } catch (err) {
+        console.error('Profile parse error:', err);
+      }
     }
-  });
-
-  sub.on('eose', () => {
-    console.log('Profile EOSE reached');
-    sub.close();
-  });
-
-  // Safety cleanup
-  setTimeout(() => {
-    sub.close();
-  }, 15000);
+    console.log('Profile subscription ended (no more events)');
+  } catch (err) {
+    console.error('Profile subscription error:', err);
+  }
 }
 
-// Load notes (kind 1 example)
+// Load notes (kind 1 example) - using for await...of
 async function loadNotes() {
   const feed = document.getElementById('feed');
   feed.innerHTML = '<p>Loading notes...</p>';
@@ -348,30 +344,24 @@ async function loadNotes() {
 
   let eventCount = 0;
 
-  sub.on('event', e => {
-    eventCount++;
-    console.log('Note event received:', e);
-    const div = document.createElement('div');
-    div.className = 'note';
-    div.innerHTML = `<strong>${e.pubkey.slice(0,10)}...</strong><p>${e.content.substring(0, 200)}${e.content.length > 200 ? '...' : ''}</p>`;
-    feed.appendChild(div);
-  });
-
-  sub.on('eose', () => {
-    console.log('Notes EOSE reached - total events:', eventCount);
+  try {
+    console.log('Starting notes subscription...');
+    for await (const e of sub) {
+      eventCount++;
+      console.log('Note event received:', e);
+      const div = document.createElement('div');
+      div.className = 'note';
+      div.innerHTML = `<strong>${e.pubkey.slice(0,10)}...</strong><p>${e.content.substring(0, 200)}${e.content.length > 200 ? '...' : ''}</p>`;
+      feed.appendChild(div);
+    }
+    console.log('Notes subscription ended - total events:', eventCount);
     if (eventCount === 0) {
       feed.innerHTML = '<p>No recent notes found on these relays.</p>';
     }
-    sub.close();
-  });
-
-  // Safety cleanup
-  setTimeout(() => {
-    if (eventCount === 0) {
-      feed.innerHTML = '<p>No notes loaded (timeout or no data). Try publishing a test note.</p>';
-    }
-    sub.close();
-  }, 15000);
+  } catch (err) {
+    console.error('Notes subscription error:', err);
+    feed.innerHTML = '<p>Error loading notes.</p>';
+  }
 }
 </script>
 </body>
