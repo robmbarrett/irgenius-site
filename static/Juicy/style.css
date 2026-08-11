@@ -233,13 +233,6 @@ a {
   line-height: 1.15;
 }
 
-.vid-btn .meta {
-  display: block;
-  margin-top: 0.2rem;
-  font-size: 0.92rem;
-  opacity: 0.7;
-}
-
 .vid-btn.missing {
   opacity: 0.55;
 }

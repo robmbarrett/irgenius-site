@@ -176,7 +176,6 @@ function renderPad() {
     btn.innerHTML = `
       <span class="num">${video.number}</span>
       <span class="label">${video.title}</span>
-      <span class="meta">Watched ${getCount(video.id)} times</span>
     `;
     btn.addEventListener("click", () => selectVideo(video.number));
     els.pad.appendChild(btn);
@@ -184,13 +183,7 @@ function renderPad() {
 }
 
 function refreshPadCounts() {
-  document.querySelectorAll(".vid-btn").forEach((btn) => {
-    const number = Number(btn.dataset.number);
-    const video = catalog.videos.find((v) => v.number === number);
-    if (!video) return;
-    const meta = btn.querySelector(".meta");
-    if (meta) meta.textContent = `Watched ${getCount(video.id)} times`;
-  });
+  // Counts are shown only on the grown-ups stats page.
 }
 
 async function syncFromApi() {
