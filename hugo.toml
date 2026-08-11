@@ -1,0 +1,5 @@
+baseURL = 'https://irgenius.org/'
+languageCode = 'en-us'
+title = 'irgenius'
+
+disableKinds = ['taxonomy', 'term', 'RSS', 'sitemap']

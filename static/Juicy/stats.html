@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Juicy watch counts — irgenius</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Fraunces:opsz,wght@9..144,700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --ink: #1b2b4a;
+        --paper: #fff9ef;
+        --sky: #2f7ea0;
+      }
+      body {
+        margin: 0;
+        font-family: "Baloo 2", system-ui, sans-serif;
+        color: var(--ink);
+        background: linear-gradient(180deg, #e8f7ff, var(--paper));
+        min-height: 100vh;
+      }
+      .wrap {
+        width: min(720px, calc(100% - 2rem));
+        margin: 0 auto;
+        padding: 2rem 0 3rem;
+      }
+      h1 {
+        font-family: "Fraunces", Georgia, serif;
+        margin: 0 0 0.35rem;
+      }
+      .sub {
+        margin: 0 0 1.25rem;
+        opacity: 0.8;
+      }
+      a {
+        color: var(--sky);
+        font-weight: 700;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: rgba(255, 255, 255, 0.85);
+        border-radius: 1rem;
+        overflow: hidden;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 0.85rem 1rem;
+        border-bottom: 1px solid rgba(27, 43, 74, 0.08);
+      }
+      th {
+        background: rgba(78, 179, 211, 0.18);
+      }
+      td.num {
+        font-size: 1.35rem;
+        font-weight: 800;
+      }
+      .note {
+        margin-top: 1rem;
+        font-size: 0.95rem;
+        opacity: 0.75;
+        line-height: 1.45;
+      }
+      .actions {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        margin: 1rem 0 1.25rem;
+      }
+      button {
+        font: inherit;
+        font-weight: 700;
+        border: 0;
+        border-radius: 999px;
+        padding: 0.55rem 0.95rem;
+        background: var(--sky);
+        color: #fff;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: #fff;
+        color: var(--ink);
+        border: 2px solid rgba(27, 43, 74, 0.12);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <p><a href="./">← Back to Juicy</a></p>
+      <h1>Watch counts</h1>
+      <p class="sub">How many times each Juicy video has been started.</p>
+
+      <div class="actions">
+        <button type="button" id="refresh">Refresh</button>
+        <button type="button" class="secondary" id="export">Copy as text</button>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Video</th>
+            <th>Plays</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+
+      <p class="note">
+        Counts are saved on this device right away. After you deploy the optional
+        Cloudflare Worker, counts sync across devices via
+        <code>/api/juicy-count</code>.
+      </p>
+    </main>
+    <script type="module">
+      const STORAGE_KEY = "juicy-play-counts-v1";
+
+      function loadCounts() {
+        try {
+          return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+        } catch {
+          return {};
+        }
+      }
+
+      async function loadCatalog() {
+        const res = await fetch("./videos.json", { cache: "no-store" });
+        return res.json();
+      }
+
+      async function syncFromApi(catalog) {
+        if (!catalog.counterApi) return loadCounts();
+        try {
+          const res = await fetch(catalog.counterApi);
+          if (!res.ok) return loadCounts();
+          const data = await res.json();
+          const merged = { ...loadCounts(), ...(data.counts || {}) };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+          return merged;
+        } catch {
+          return loadCounts();
+        }
+      }
+
+      async function render() {
+        const catalog = await loadCatalog();
+        const counts = await syncFromApi(catalog);
+        const rows = document.querySelector("#rows");
+        rows.innerHTML = catalog.videos
+          .map(
+            (v) => `
+          <tr>
+            <td>${v.number}</td>
+            <td>${v.title}</td>
+            <td class="num">${Number(counts[v.id] || 0)}</td>
+          </tr>`
+          )
+          .join("");
+        return { catalog, counts };
+      }
+
+      document.querySelector("#refresh").addEventListener("click", () => render());
+      document.querySelector("#export").addEventListener("click", async () => {
+        const { catalog, counts } = await render();
+        const text = catalog.videos
+          .map((v) => `${v.number}. ${v.title}: ${Number(counts[v.id] || 0)}`)
+          .join("\n");
+        await navigator.clipboard.writeText(text);
+        alert("Counts copied.");
+      });
+
+      render();
+    </script>
+  </body>
+</html>

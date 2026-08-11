@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Nostr Key Generator - irgenius.org</title>
+
+  <!-- MapLibre GL JS -->
+  <script src="https://unpkg.com/maplibre-gl@^5.17.0/dist/maplibre-gl.js"></script>
+  <link href="https://unpkg.com/maplibre-gl@^5.17.0/dist/maplibre-gl.css" rel="stylesheet">
+
+  <!-- nostr-tools -->
+  <script src="https://unpkg.com/nostr-tools@2.11.0/lib/nostr.bundle.js"></script>
+
+  <style>
+    body { 
+      font-family: system-ui, sans-serif; 
+      max-width: 600px; 
+      margin: 40px auto; 
+      padding: 20px; 
+      text-align: center; 
+      background: #f9f9f9; 
+      color: #333; 
+    }
+    h1, h2 { color: #2c3e50; margin-bottom: 20px; }
+    button { 
+      color: white; 
+      border: none; 
+      padding: 14px 28px; 
+      font-size: 18px; 
+      margin: 10px; 
+      cursor: pointer; 
+      border-radius: 8px; 
+    }
+    button.primary   { background: #27ae60; }
+    button.primary:hover   { background: #219653; }
+    button.primary:disabled { background: #95a5a6; cursor: not-allowed; }
+    button.secondary { background: #3498db; }
+    button.secondary:hover { background: #2980b9; }
+    button.danger    { background: #e74c3c; }
+    button.danger:hover    { background: #c0392b; }
+    .result, #confirmation, #mapScreen { 
+      display: none; 
+      margin-top: 30px; 
+      background: white; 
+      padding: 25px; 
+      border-radius: 8px; 
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+      text-align: left; 
+    }
+    .warning { 
+      color: #e74c3c; 
+      font-weight: bold; 
+      margin-bottom: 15px; 
+      font-size: 1.1em; 
+    }
+    pre { 
+      background: #ecf0f1; 
+      padding: 15px; 
+      border-radius: 6px; 
+      overflow-x: auto; 
+      font-family: monospace; 
+      white-space: pre-wrap; 
+      word-break: break-all; 
+      margin: 10px 0; 
+    }
+    .actions { text-align: center; margin-top: 20px; }
+    #status { 
+      color: #7f8c8d; 
+      font-size: 0.95em; 
+      margin-top: 10px; 
+      transition: all 0.4s ease;
+      line-height: 1.5;
+    }
+
+    #usMapContainer { 
+      width: 100%; 
+      height: 500px; 
+      min-height: 500px;
+      border: 1px solid #ccc; 
+      border-radius: 8px; 
+      overflow: hidden;
+      background: #e0f7fa;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: 1; }
+      70% { transform: scale(1.4); opacity: 0.4; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+<h1>Nostr Key Generator</h1>
+<p>Generate a new Nostr key pair securely in your browser.<br><strong>Save your nsec</strong> — never share it!</p>
+
+<button id="generateBtn" class="primary" onclick="generateKey()">Generate New Key</button>
+<div id="status">Ready!</div>
+
+<div id="result" class="result">
+  <p class="warning">⚠️ BACKUP REQUIRED — SAVE THIS NOW!</p>
+  <p><strong>Secret Key (nsec):</strong></p>
+  <pre id="nsec"></pre>
+  <p><strong>Public Key (npub):</strong></p>
+  <pre id="npub"></pre>
+
+  <div class="actions">
+    <button onclick="downloadBackup()" class="primary">Download Backup (.txt)</button>
+  </div>
+</div>
+
+<div id="confirmation" class="result">
+  <h2>Backup Confirmation</h2>
+  <p class="warning">Did you successfully download and save the <code>nostr-key-backup.txt</code> file?</p>
+  <p><strong>Important:</strong> Without this backup you will permanently lose access to your account if you lose this device or clear browser data.</p>
+
+  <div class="actions">
+    <button id="confirmYes" class="primary">Yes, I saved it securely</button>
+    <button id="confirmNo" class="danger">No, let me download again</button>
+  </div>
+</div>
+
+<div id="mapScreen" class="result">
+  <h2>Your Approximate Location</h2>
+  <p>Blue dot = estimated location (browser geolocation preferred, falls back to IP)</p>
+  <div id="usMapContainer"></div>
+</div>
+
+<script>
+let mapInstance = null;
+let generatedNsec = null;
+let generatedNpub = null;
+
+function generateKey() {
+  const btn = document.getElementById('generateBtn');
+  const status = document.getElementById('status');
+  btn.disabled = true;
+  status.textContent = 'Generating secure key...';
+
+  if (typeof NostrTools === 'undefined' || typeof NostrTools.generateSecretKey !== 'function') {
+    status.textContent = 'Error: nostr-tools library failed to load.';
+    console.error('NostrTools not available');
+    btn.disabled = false;
+    return;
+  }
+
+  try {
+    const secretKey = NostrTools.generateSecretKey();
+    const pubkey    = NostrTools.getPublicKey(secretKey);
+    const nsec      = NostrTools.nip19.nsecEncode(secretKey);
+    const npub      = NostrTools.nip19.npubEncode(pubkey);
+
+    // Store for later use
+    generatedNsec = nsec;
+    generatedNpub = npub;
+
+    document.getElementById('nsec').textContent = nsec;
+    document.getElementById('npub').textContent = npub;
+
+    // Hide introductory content
+    document.querySelector('h1').style.display = 'none';
+    document.querySelector('p').style.display = 'none';
+    btn.style.display = 'none';
+    status.style.display = 'none';  // temporarily hide to change content
+
+    // Show result area
+    document.getElementById('result').style.display = 'block';
+
+    // Show new prominent message at top
+    status.innerHTML = 
+      'Key Generated! Please create a backup.<br><br>' +
+      '<div style="font-size:1.3em; font-weight:bold; color:#27ae60; margin:30px 0 40px;">' +
+      'Scroll Down ↓' +
+      '</div>';
+    status.style.display = 'block';
+    status.style.fontSize = '1.5em';
+    status.style.fontWeight = 'bold';
+    status.style.color = '#2c3e50';
+    status.style.marginTop = '20px';
+    status.style.marginBottom = '30px';
+
+    // Smooth scroll to the result section
+    document.getElementById('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  } catch (err) {
+    status.textContent = 'Error: ' + err.message;
+    console.error('Key generation failed:', err);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function downloadBackup() {
+  if (!generatedNsec) return alert('No key generated yet.');
+
+  const text = `Nostr Key Backup - ${new Date().toISOString()}
+Secret Key (nsec): ${generatedNsec}
+Public Key (npub): ${generatedNpub}
+
+⚠️ NEVER share your nsec! Store offline securely.`;
+
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'nostr-key-backup.txt';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  document.getElementById('result').style.display = 'none';
+  document.getElementById('confirmation').style.display = 'block';
+  document.getElementById('status').textContent = 'Please confirm you saved the backup.';
+}
+
+document.getElementById('confirmYes').onclick = () => {
+  document.getElementById('confirmation').style.display = 'none';
+  const mapScreen = document.getElementById('mapScreen');
+  const container = document.getElementById('usMapContainer');
+
+  mapScreen.style.display = 'block';
+  void container.offsetHeight;
+
+  document.getElementById('status').textContent = 'Backup confirmed → loading map...';
+
+  setTimeout(() => {
+    console.log('Container size before map init:', container.clientWidth, container.clientHeight);
+
+    if (!mapInstance) {
+      mapInstance = new maplibregl.Map({
+        container: 'usMapContainer',
+        style: {
+          version: 8,
+          sources: {
+            osm: {
+              type: 'raster',
+              tiles: [
+                'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'
+              ],
+              tileSize: 256,
+              attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }
+          },
+          layers: [
+            {
+              id: 'osm-layer',
+              type: 'raster',
+              source: 'osm',
+              minzoom: 0,
+              maxzoom: 19
+            }
+          ]
+        },
+        center: [-96, 37.8],
+        zoom: 4
+      });
+
+      container.style.visibility = 'hidden';
+      void container.offsetHeight;
+      container.style.visibility = 'visible';
+
+      setTimeout(() => mapInstance.resize(), 100);
+      setTimeout(() => mapInstance.resize(), 300);
+      setTimeout(() => mapInstance.resize(), 600);
+    }
+
+    loadUSMapWithLocation();
+  }, 400);
+};
+
+document.getElementById('confirmNo').onclick = () => {
+  document.getElementById('confirmation').style.display = 'none';
+  document.getElementById('result').style.display = 'block';
+  document.getElementById('status').textContent = 'Back to key. Please download and save the file.';
+};
+
+function loadUSMapWithLocation() {
+  if (!mapInstance) return;
+
+  const addLocation = (lng, lat, popupText, zoom = 7, accuracy = 0) => {
+    const lngLat = [lng, lat];
+
+    mapInstance.addSource('user-point', {
+      type: 'geojson',
+      data: {
+        type: 'Feature',
+        geometry: {
+          type: 'Point',
+          coordinates: lngLat
+        }
+      }
+    });
+
+    mapInstance.addLayer({
+      id: 'user-dot',
+      type: 'circle',
+      source: 'user-point',
+      paint: {
+        'circle-radius': 12,
+        'circle-color': '#3388ff',
+        'circle-stroke-color': '#ffffff',
+        'circle-stroke-width': 3,
+        'circle-opacity': 0.9
+      }
+    });
+
+    if (accuracy > 0) {
+      mapInstance.addSource('accuracy', {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          geometry: {
+            type: 'Point',
+            coordinates: lngLat
+          }
+        }
+      });
+
+      mapInstance.addLayer({
+        id: 'accuracy-ring',
+        type: 'circle',
+        source: 'accuracy',
+        paint: {
+          'circle-radius': accuracy,
+          'circle-color': '#3388ff',
+          'circle-opacity': 0.2,
+          'circle-stroke-color': '#3388ff',
+          'circle-stroke-width': 2
+        }
+      });
+    }
+
+    if (popupText) {
+      new maplibregl.Popup({ offset: 25, closeButton: false })
+        .setLngLat(lngLat)
+        .setHTML(`<div style="padding:6px 10px; background:white; border-radius:4px; box-shadow:0 2px 6px rgba(0,0,0,0.3);">${popupText}</div>`)
+        .addTo(mapInstance);
+    }
+
+    mapInstance.setCenter(lngLat);
+    mapInstance.setZoom(zoom);
+
+    setTimeout(() => {
+      mapInstance.resize();
+      const currentZoom = mapInstance.getZoom();
+      mapInstance.easeTo({
+        zoom: currentZoom + 0.5,
+        duration: 400
+      }, { essential: true });
+      setTimeout(() => {
+        mapInstance.easeTo({
+          zoom: currentZoom,
+          duration: 400
+        }, { essential: true });
+        mapInstance.resize();
+      }, 600);
+      console.log('Triggered zoom animation + resize to force tile load');
+    }, 800);
+  };
+
+  if ('ResizeObserver' in window) {
+    new ResizeObserver(() => mapInstance?.resize()).observe(document.getElementById('usMapContainer'));
+  }
+
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos => addLocation(pos.coords.longitude, pos.coords.latitude, 'Your location (browser geolocation)', 7, pos.coords.accuracy),
+      () => fallbackToIP(),
+      { timeout: 15000, enableHighAccuracy: true }
+    );
+  } else {
+    fallbackToIP();
+  }
+
+  function fallbackToIP() {
+    fetch('https://ipapi.co/json/')
+      .then(res => res.json())
+      .then(data => {
+        if (data.latitude && data.longitude) {
+          const zoom = (data.country_name === 'United States') ? 6 : 4;
+          addLocation(data.longitude, data.latitude, `Approx: ${data.city || 'Unknown'}, ${data.region || data.country_name} (IP)`, zoom);
+        } else {
+          showNoLocation();
+        }
+      })
+      .catch(showNoLocation);
+  }
+
+  function showNoLocation() {
+    mapInstance.setCenter([-98.5795, 39.8283]);
+    mapInstance.setZoom(4);
+    setTimeout(() => mapInstance.resize(), 200);
+    alert('Could not determine your location.');
+  }
+}
+</script>
+</body>
+</html>

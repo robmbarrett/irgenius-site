@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Juicy — irgenius</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="top">
+        <div class="brand-block">
+          <h1 id="juicy-title">Juicy</h1>
+          <p id="juicy-subtitle">Press a number to pick a video</p>
+        </div>
+        <a class="grownup" href="./stats.html">Grown-ups: watch counts</a>
+      </header>
+
+      <div class="stage">
+        <section class="player-card" aria-live="polite">
+          <div class="player-shell">
+            <div class="placeholder" id="placeholder">
+              <strong>Pick a number</strong>
+              <span>1 through 9 on the buttons or keyboard</span>
+            </div>
+            <iframe
+              id="player-frame"
+              title="Juicy video"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowfullscreen
+              hidden
+            ></iframe>
+            <video id="player-video" controls playsinline hidden></video>
+          </div>
+          <div class="now-playing">
+            <h2 id="video-title">Ready when you are</h2>
+            <div class="count-pill">
+              Plays <span id="play-count">0</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="menu-card">
+          <h2>Choose a video</h2>
+          <p class="hint">Tap a big number — or press it on the keyboard</p>
+          <div class="pad" id="pad"></div>
+        </section>
+      </div>
+    </div>
+
+    <div class="toast" id="toast" role="status"></div>
+    <script src="./app.js" type="module"></script>
+  </body>
+</html>

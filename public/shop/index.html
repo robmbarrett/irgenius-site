@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>irgenius Shop</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700&family=Nunito:wght@500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        margin: 0;
+        font-family: "Nunito", system-ui, sans-serif;
+        color: #17333a;
+        background: #f3faf8;
+        padding: 2rem;
+      }
+      a {
+        color: #14574d;
+        font-weight: 700;
+      }
+      h1 {
+        font-family: "Fraunces", Georgia, serif;
+      }
+      .card {
+        max-width: 32rem;
+        background: #fff;
+        border-radius: 1rem;
+        padding: 1.5rem;
+        border: 1px solid rgba(23, 51, 58, 0.08);
+      }
+      button {
+        font: inherit;
+        font-weight: 800;
+        border: 0;
+        border-radius: 999px;
+        padding: 0.7rem 1.1rem;
+        background: #1f7a6c;
+        color: #fff;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <p><a href="/">← irgenius</a></p>
+    <h1>irgenius Shop</h1>
+    <p>More coming soon...!!</p>
+    <div class="card">
+      <h2>Products</h2>
+      <p>Cool T-Shirt — $19.99</p>
+      <button
+        class="snipcart-add-item"
+        data-item-id="1"
+        data-item-price="19.99"
+        data-item-url="/shop/"
+        data-item-name="Cool T-Shirt"
+      >
+        Add to Cart
+      </button>
+    </div>
+    <script async src="https://cdn.snipcart.com/themes/v3.6.0/default/snipcart.js"></script>
+    <div
+      hidden
+      id="snipcart"
+      data-api-key="MWEwY2NmMDAtOTM4Zi00ZTM1LThmMDYtNjliZGQzM2MyMzgxNjM4NzkzMDM5ODk5OTcyOTcw"
+    ></div>
+  </body>
+</html>

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>irgenius</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Nunito:wght@500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --ink: #17333a;
+        --foam: #f3faf8;
+        --sea: #1f7a6c;
+        --sea-deep: #14574d;
+        --sun: #f0b429;
+        --berry: #d4564e;
+        --mist: rgba(23, 51, 58, 0.08);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Nunito", system-ui, sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 12% 18%, rgba(240, 180, 41, 0.28), transparent 34%),
+          radial-gradient(circle at 88% 12%, rgba(31, 122, 108, 0.22), transparent 32%),
+          linear-gradient(160deg, #e7f6f2 0%, var(--foam) 48%, #dff0ea 100%);
+      }
+
+      .wrap {
+        width: min(960px, calc(100% - 2rem));
+        margin: 0 auto;
+        padding: 3.5rem 0 4rem;
+      }
+
+      .brand {
+        font-family: "Fraunces", Georgia, serif;
+        font-size: clamp(3rem, 8vw, 5.5rem);
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        line-height: 0.95;
+        margin: 0 0 0.75rem;
+      }
+
+      .lede {
+        max-width: 28rem;
+        font-size: 1.15rem;
+        line-height: 1.5;
+        margin: 0 0 2.5rem;
+        opacity: 0.9;
+      }
+
+      .doors {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 1rem;
+      }
+
+      a.door {
+        display: block;
+        text-decoration: none;
+        color: inherit;
+        padding: 1.5rem 1.4rem 1.35rem;
+        border: 2px solid var(--mist);
+        border-radius: 1.25rem;
+        background: rgba(255, 255, 255, 0.72);
+        transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+      }
+
+      a.door:hover,
+      a.door:focus-visible {
+        transform: translateY(-3px);
+        border-color: var(--sea);
+        background: #fff;
+        outline: none;
+      }
+
+      a.door.juicy {
+        border-color: rgba(240, 180, 41, 0.55);
+        background: linear-gradient(180deg, #fff8e6, #fff);
+      }
+
+      .door h2 {
+        font-family: "Fraunces", Georgia, serif;
+        font-size: 1.85rem;
+        margin: 0 0 0.4rem;
+      }
+
+      .door p {
+        margin: 0;
+        line-height: 1.45;
+        opacity: 0.85;
+      }
+
+      .door .go {
+        display: inline-block;
+        margin-top: 1rem;
+        font-weight: 800;
+        color: var(--sea-deep);
+      }
+
+      a.door.juicy .go {
+        color: #9a6a00;
+      }
+
+      footer {
+        margin-top: 3rem;
+        font-size: 0.9rem;
+        opacity: 0.65;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <h1 class="brand">irgenius</h1>
+      <p class="lede">
+        A small home on the web — shop odds and ends, or open Juicy for
+        granddaughter learning videos.
+      </p>
+
+      <div class="doors">
+        <a class="door juicy" href="/Juicy/">
+          <h2>Juicy</h2>
+          <p>Alphabet, numbers, animals, planets, and more. Press a number to watch.</p>
+          <span class="go">Open Juicy →</span>
+        </a>
+        <a class="door" href="/shop/">
+          <h2>Shop</h2>
+          <p>The irgenius shop — merch and little things.</p>
+          <span class="go">Browse shop →</span>
+        </a>
+      </div>
+
+      <footer>irgenius.org</footer>
+    </main>
+  </body>
+</html>

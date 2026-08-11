@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Friendzap - Simple Nostr Client</title>
+
+  <!-- Use esm.sh for reliable nostr-tools (fixes export issues) -->
+  <script src="https://esm.sh/nostr-tools@2.11.0"></script>
+
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: #f9f9f9;
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      color: #333;
+    }
+    header {
+      background: #2c3e50;
+      color: white;
+      padding: 16px;
+      text-align: center;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 8px 4px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+    button.primary   { background: #27ae60; color: white; }
+    button.primary:hover   { background: #219653; }
+    button.secondary { background: #3498db; color: white; }
+    button.secondary:hover { background: #2980b9; }
+    button.danger    { background: #e74c3c; color: white; }
+    #status { margin: 16px 0; color: #555; text-align: center; font-weight: bold; }
+    .feed {
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .note {
+      border-bottom: 1px solid #eee;
+      padding: 12px 0;
+    }
+    .note:last-child { border-bottom: none; }
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.65);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    .modal {
+      background: white;
+      border-radius: 12px;
+      width: 90%;
+      max-width: 520px;
+      max-height: 85vh;
+      overflow-y: auto;
+      padding: 24px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+      position: relative;
+    }
+    .close-btn {
+      position: absolute;
+      top: 12px; right: 16px;
+      font-size: 1.8rem;
+      cursor: pointer;
+      color: #999;
+    }
+    .close-btn:hover { color: #333; }
+    .relay-item {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 12px 0;
+      padding: 10px;
+      background: #f8f8f8;
+      border-radius: 6px;
+      border: 1px solid #ddd;
+    }
+    .relay-url { flex: 1 1 100%; word-break: break-all; font-family: monospace; font-size: 0.95rem; }
+    input[type="text"] { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; min-width: 180px; }
+    .rw-toggle { white-space: nowrap; font-size: 0.9rem; }
+    button.remove { background: #ff4d4d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+    .add-section { margin-top: 20px; display: flex; flex-wrap: wrap; gap: 8px; }
+    .actions { margin-top: 28px; text-align: right; }
+    #modalStatus { margin-top: 20px; padding: 12px; border-radius: 6px; text-align: center; font-weight: bold; }
+    #modalStatus.success { background: #e8f5e9; color: #2e7d32; }
+    #modalStatus.error   { background: #ffebee; color: #c62828; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Friendzap - Your Nostr Notes</h1>
+  <button class="primary" id="loginBtn">Login with Alby</button>
+  <button class="secondary" id="settingsBtn" disabled>Relay Settings</button>
+  <div id="status">Ready – Login to see your notes & profile</div>
+</header>
+
+<div class="container">
+  <div id="profile" style="margin-bottom: 24px; text-align: center;">
+    <img id="profilePic" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover;" src="https://placehold.co/80x80/ccc/333?text=Profile" alt="Profile">
+    <h2 id="profileName">Your Profile</h2>
+    <p id="profileBio"></p>
+  </div>
+
+  <div class="feed" id="feed">
+    <p>Login to load your notes...</p>
+  </div>
+</div>
+
+<!-- Relay Settings Modal -->
+<div id="settingsModal" class="modal-overlay">
+  <div class="modal">
+    <span class="close-btn" onclick="document.getElementById('settingsModal').style.display='none'">&times;</span>
+    <h2>Relay Settings</h2>
+    <p>Manage your preferred relays (publishes kind 10002 via Alby).<br>Clients should respect this list for your data.</p>
+
+    <div id="relayList"></div>
+
+    <div class="add-section">
+      <input type="text" id="newRelay" placeholder="wss://relay.example.com" />
+      <label class="rw-toggle"><input type="checkbox" id="newRead" checked> Read</label>
+      <label class="rw-toggle"><input type="checkbox" id="newWrite" checked> Write</label>
+      <button onclick="addRelay()">Add</button>
+    </div>
+
+    <div class="actions">
+      <button class="secondary" onclick="resetDefaults()">Reset Defaults</button>
+      <button class="primary" onclick="publishRelays()">Save & Publish</button>
+    </div>
+
+    <div id="modalStatus"></div>
+  </div>
+</div>
+
+<script>
+// Default relays (only read-enabled ones used for loading)
+let relays = [
+  { url: "wss://relay.damus.io",        read: true,  write: true  },
+  { url: "wss://nos.lol",               read: true,  write: true  },
+  { url: "wss://nostr-pub.wellorder.net", read: true,  write: false },
+  { url: "wss://relay.nostr.band",      read: true,  write: true  },
+  { url: "wss://purplepag.es",          read: true,  write: false }
+];
+
+let pubkey = null;
+let pool = new NostrTools.SimplePool();
+
+// Render relays in modal
+function renderRelays() {
+  const list = document.getElementById('relayList');
+  list.innerHTML = '';
+  relays.forEach((r, i) => {
+    const div = document.createElement('div');
+    div.className = 'relay-item';
+    div.innerHTML = `
+      <span class="relay-url">${r.url}</span>
+      <label class="rw-toggle"><input type="checkbox" ${r.read?'checked':''} onchange="relays[${i}].read=this.checked"> Read</label>
+      <label class="rw-toggle"><input type="checkbox" ${r.write?'checked':''} onchange="relays[${i}].write=this.checked"> Write</label>
+      <button class="remove" onclick="relays.splice(${i},1);renderRelays();">Remove</button>
+    `;
+    list.appendChild(div);
+  });
+}
+
+// Add new relay
+function addRelay() {
+  const url = document.getElementById('newRelay').value.trim();
+  if (!url.startsWith('ws')) return alert('Valid wss:// or ws:// URL required');
+  relays.push({
+    url,
+    read: document.getElementById('newRead').checked,
+    write: document.getElementById('newWrite').checked
+  });
+  renderRelays();
+  document.getElementById('newRelay').value = '';
+}
+
+// Reset defaults
+function resetDefaults() {
+  if (confirm('Reset to default relays?')) {
+    relays = [
+      { url: "wss://relay.damus.io", read: true, write: true },
+      { url: "wss://nos.lol", read: true, write: true },
+      { url: "wss://nostr-pub.wellorder.net", read: true, write: false },
+      { url: "wss://relay.nostr.band", read: true, write: true },
+      { url: "wss://purplepag.es", read: true, write: false }
+    ];
+    renderRelays();
+  }
+}
+
+// Publish kind 10002
+async function publishRelays() {
+  const status = document.getElementById('modalStatus');
+  status.textContent = 'Publishing...';
+  status.className = '';
+
+  if (!window.nostr) {
+    status.textContent = 'No Nostr extension (Alby) detected.';
+    status.className = 'error';
+    return;
+  }
+
+  try {
+    pubkey = await window.nostr.getPublicKey();
+
+    const event = {
+      kind: 10002,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: relays.map(r => {
+        const tag = ["r", r.url];
+        if (r.read && !r.write) tag.push("read");
+        if (r.write && !r.read) tag.push("write");
+        return tag;
+      }),
+      content: "",
+      pubkey
+    };
+
+    const signed = await window.nostr.signEvent(event);
+
+    const publishUrls = [
+      'wss://relay.damus.io',
+      'wss://nos.lol',
+      'wss://nostr-pub.wellorder.net',
+      'wss://relay.nostr.band'
+    ];
+
+    let successCount = 0;
+
+    for (const url of publishUrls) {
+      try {
+        const relay = await NostrTools.Relay.connect(url);
+        await relay.publish(signed);
+        relay.close();
+        successCount++;
+      } catch (err) {
+        console.warn(`Publish failed on ${url}:`, err);
+      }
+    }
+
+    if (successCount > 0) {
+      status.textContent = `Success! Published to ${successCount} relay(s). Refresh clients.`;
+      status.className = 'success';
+    } else {
+      status.textContent = 'Failed to publish — check console.';
+      status.className = 'error';
+    }
+  } catch (err) {
+    status.textContent = 'Error: ' + (err.message || 'Sign/publish failed');
+    status.className = 'error';
+    console.error(err);
+  }
+}
+
+// Login
+document.getElementById('loginBtn').onclick = async () => {
+  if (!window.nostr) {
+    document.getElementById('status').textContent = 'No Alby extension found. Install/enable Alby.';
+    return;
+  }
+
+  try {
+    pubkey = await window.nostr.getPublicKey();
+    document.getElementById('status').textContent = 'Logged in as ' + pubkey.slice(0,10) + '...';
+    document.getElementById('settingsBtn').disabled = false;
+
+    loadProfile();
+    loadNotes();
+  } catch (err) {
+    document.getElementById('status').textContent = 'Login failed: ' + err.message;
+  }
+};
+
+// Open relay settings
+document.getElementById('settingsBtn').onclick = () => {
+  document.getElementById('settingsModal').style.display = 'flex';
+  renderRelays();
+};
+
+// Load profile (kind 0) - using for await...of (async iterator)
+async function loadProfile() {
+  if (!pubkey) {
+    document.getElementById('profileName').textContent = 'Not logged in';
+    return;
+  }
+
+  const pool = new NostrTools.SimplePool();
+  const sub = pool.subscribeMany(
+    relays.filter(r => r.read).map(r => r.url),
+    [{ kinds: [0], authors: [pubkey], limit: 1 }]
+  );
+
+  try {
+    console.log('Starting profile subscription...');
+    for await (const e of sub) {
+      console.log('Profile event received:', e);
+      try {
+        const m = JSON.parse(e.content);
+        document.getElementById('profileName').textContent = m.name || 'Anonymous';
+        document.getElementById('profileBio').textContent = m.about || '';
+        if (m.picture) document.getElementById('profilePic').src = m.picture;
+      } catch (err) {
+        console.error('Profile parse error:', err);
+      }
+    }
+    console.log('Profile subscription ended (no more events)');
+  } catch (err) {
+    console.error('Profile subscription error:', err);
+  }
+}
+
+// Load notes (kind 1 example) - using for await...of
+async function loadNotes() {
+  const feed = document.getElementById('feed');
+  feed.innerHTML = '<p>Loading notes...</p>';
+
+  const pool = new NostrTools.SimplePool();
+  const sub = pool.subscribeMany(
+    relays.filter(r => r.read).map(r => r.url),
+    [{ kinds: [1], limit: 10 }]
+  );
+
+  let eventCount = 0;
+
+  try {
+    console.log('Starting notes subscription...');
+    for await (const e of sub) {
+      eventCount++;
+      console.log('Note event received:', e);
+      const div = document.createElement('div');
+      div.className = 'note';
+      div.innerHTML = `<strong>${e.pubkey.slice(0,10)}...</strong><p>${e.content.substring(0, 200)}${e.content.length > 200 ? '...' : ''}</p>`;
+      feed.appendChild(div);
+    }
+    console.log('Notes subscription ended - total events:', eventCount);
+    if (eventCount === 0) {
+      feed.innerHTML = '<p>No recent notes found on these relays.</p>';
+    }
+  } catch (err) {
+    console.error('Notes subscription error:', err);
+    feed.innerHTML = '<p>Error loading notes.</p>';
+  }
+}
+</script>
+</body>
+</html>
