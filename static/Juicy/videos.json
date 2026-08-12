@@ -7,43 +7,43 @@
       "id": "alphabet",
       "number": 1,
       "title": "Alphabet",
-      "youtube": "BIonmii6BIs",
-      "mp4": ""
+      "youtube": "",
+      "mp4": "./videos/alphabet.mp4"
     },
     {
       "id": "numbers",
       "number": 2,
       "title": "Numbers",
-      "youtube": "vkkmPpGKEfk",
-      "mp4": ""
+      "youtube": "",
+      "mp4": "./videos/numbers.mp4"
     },
     {
       "id": "days",
       "number": 3,
       "title": "Days of the Week",
-      "youtube": "CM8fjiOFfoY",
-      "mp4": ""
+      "youtube": "",
+      "mp4": "./videos/days_of_the_week.mp4"
     },
     {
       "id": "animals",
       "number": 4,
       "title": "Animals",
-      "youtube": "THjAA6-ERMc",
-      "mp4": ""
+      "youtube": "",
+      "mp4": "./videos/animals.mp4"
     },
     {
       "id": "planets",
       "number": 5,
       "title": "Planets",
-      "youtube": "MvHOawmdwa8",
-      "mp4": ""
+      "youtube": "",
+      "mp4": "./videos/planets.mp4"
     },
     {
       "id": "shapes",
       "number": 6,
       "title": "Shapes",
-      "youtube": "IVW_pYDj1ko",
-      "mp4": ""
+      "youtube": "",
+      "mp4": "./videos/shapes.mp4"
     }
   ]
 }
