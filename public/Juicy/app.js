@@ -121,19 +121,51 @@ async function playYoutube(video) {
   await bumpCount(video.id);
 }
 
-async function playMp4(video) {
+function requestVideoFullscreen(videoEl) {
+  try {
+    // iOS Safari: native video fullscreen (best phone support).
+    if (typeof videoEl.webkitEnterFullscreen === "function") {
+      videoEl.webkitEnterFullscreen();
+      return;
+    }
+    const req =
+      videoEl.requestFullscreen ||
+      videoEl.webkitRequestFullscreen ||
+      videoEl.msRequestFullscreen;
+    if (!req) return;
+    const result = req.call(videoEl);
+    if (result && typeof result.catch === "function") {
+      result.catch(() => {});
+    }
+  } catch {
+    // Fullscreen blocked or unavailable; inline playback still works.
+  }
+}
+
+function playMp4(video) {
   els.placeholder.hidden = true;
   els.frame.hidden = true;
   els.frame.src = "";
   els.video.hidden = false;
   els.video.src = video.mp4.trim();
-  els.video.play().catch(() => {});
 
-  const onPlay = async () => {
-    els.video.removeEventListener("play", onPlay);
-    await bumpCount(video.id);
+  // Keep this close to the tap/keypress so browsers allow fullscreen + autoplay.
+  const playAttempt = els.video.play();
+  requestVideoFullscreen(els.video);
+
+  const onPlaying = () => {
+    els.video.removeEventListener("playing", onPlaying);
+    // Some phones (especially iPhone) accept fullscreen only after play starts.
+    requestVideoFullscreen(els.video);
+    bumpCount(video.id);
   };
-  els.video.addEventListener("play", onPlay);
+  els.video.addEventListener("playing", onPlaying);
+
+  if (playAttempt && typeof playAttempt.catch === "function") {
+    playAttempt.catch(() => {
+      els.video.removeEventListener("playing", onPlaying);
+    });
+  }
 }
 
 async function selectVideo(number) {

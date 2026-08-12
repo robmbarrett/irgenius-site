@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./style.css?v=3" />
+    <link rel="stylesheet" href="./style.css?v=4" />
   </head>
   <body>
     <div class="app">
@@ -35,7 +35,13 @@
               allowfullscreen
               hidden
             ></iframe>
-            <video id="player-video" controls playsinline hidden></video>
+            <video
+              id="player-video"
+              controls
+              playsinline
+              webkit-playsinline
+              hidden
+            ></video>
           </div>
           <div class="now-playing">
             <h2 id="video-title">Ready when you are</h2>
@@ -52,6 +58,6 @@
     </div>
 
     <div class="toast" id="toast" role="status"></div>
-    <script src="./app.js?v=3" type="module"></script>
+    <script src="./app.js?v=4" type="module"></script>
   </body>
 </html>
